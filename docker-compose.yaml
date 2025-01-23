@@ -1,0 +1,12 @@
+services:
+    example-discord-bot:
+        build:
+            context: .
+        container_name: example-discord-bot
+        restart: "no"
+        secrets:
+          - discord_token
+
+secrets:
+    discord_token:
+        file: ./secrets/discord_token.txt
