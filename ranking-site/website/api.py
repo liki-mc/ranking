@@ -17,7 +17,7 @@ Including another URLconf
 import json
 from django.urls import path
 from django.http import JsonResponse, HttpRequest
-from .models import Ranking
+from .models import Ranking, Entry
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 
@@ -54,57 +54,29 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
+serialize_ranking: Callable[[Ranking], dict[str, any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
+
+serialize_entry: Callable[[Entry], dict[str, any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date}
+serialize_entries: Callable[[list[Entry]], list[dict[str, any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date} for entry in entries]
+
 def get_rankings(request: HttpRequest) -> JsonResponse:
     print(request)
-    data = [
-        {
-            'name': ranking.name,
-            'rid': ranking.rid,
-            'character': ranking.character,
-            'channel': ranking.channel,
-            'date': ranking.date,
-        }
-        for ranking in Ranking.objects.all()
-    ]
+    data = serialize_rankings(Ranking.objects.all())
     return JsonResponse(data, safe = False)
 
 def get_rankings_by_channel(request: HttpRequest, channel: int) -> JsonResponse:
-    data = [
-        {
-            'name': ranking.name,
-            'rid': ranking.rid,
-            'character': ranking.character,
-            'channel': ranking.channel,
-            'date': ranking.date,
-        }
-        for ranking in Ranking.objects.filter(channel = channel)
-    ]
+    data = serialize_rankings(Ranking.objects.filter(channel = channel))
     return JsonResponse(data, safe = False)
 
 def get_ranking(request: HttpRequest, rid: int) -> JsonResponse:
-    ranking = Ranking.objects.get(rid = rid)
-    data = {
-        'name': ranking.name,
-        'rid': ranking.rid,
-        'character': ranking.character,
-        'channel': ranking.channel,
-        'date': ranking.date,
-    }
+    data = serialize_ranking(Ranking.objects.get(rid = rid))
     return JsonResponse(data, safe = False)
 
 def get_rankings_by_search(request: HttpRequest) -> JsonResponse:
     channel = request.GET.get('channel')
     character = request.GET.get('character')
-    data = [
-        {
-            'name': ranking.name,
-            'rid': ranking.rid,
-            'character': ranking.character,
-            'channel': ranking.channel,
-            'date': ranking.date,
-        }
-        for ranking in Ranking.objects.filter(channel = channel, character = character)
-    ]
+    data = serialize_rankings(Ranking.objects.filter(channel = channel, character = character))
     return JsonResponse(data, safe = False)
 
 def create_ranking(request: HttpRequest) -> JsonResponse:
@@ -116,18 +88,15 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
                 character = body['character'],
                 channel = body['channel']
             )
-            data = {
-                'name': ranking.name,
-                'rid': ranking.rid,
-                'character': ranking.character,
-                'channel': ranking.channel,
-                'date': ranking.date,
-            }
+            data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False, status = 201)
+        
         except json.JSONDecodeError:
             return error('Invalid JSON', 400)
+        
         except IntegrityError as e:
             return error("Internal server error", 500)
+        
         except ValidationError as e:
             return error(e.message_dict, 400)
     else:
@@ -142,13 +111,7 @@ def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
             ranking.character = body.get('character', ranking.character)
             ranking.channel = body.get('channel', ranking.channel)
             ranking.save()
-            data = {
-                'name': ranking.name,
-                'rid': ranking.rid,
-                'character': ranking.character,
-                'channel': ranking.channel,
-                'date': ranking.date,
-            }
+            data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False)
         except json.JSONDecodeError:
             return error('Invalid JSON', 400)
