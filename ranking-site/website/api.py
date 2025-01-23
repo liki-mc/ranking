@@ -14,9 +14,12 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+import json
 from django.urls import path
 from django.http import JsonResponse, HttpRequest
 from .models import Ranking
+from django.db.utils import IntegrityError
+from django.core.exceptions import ValidationError
 
 from typing import Callable
 
@@ -51,7 +54,7 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-def getRankings(request: HttpRequest) -> JsonResponse:
+def get_rankings(request: HttpRequest) -> JsonResponse:
     print(request)
     data = [
         {
@@ -65,7 +68,7 @@ def getRankings(request: HttpRequest) -> JsonResponse:
     ]
     return JsonResponse(data, safe = False)
 
-def getRankingsbyChannel(request: HttpRequest, channel: int) -> JsonResponse:
+def get_rankings_by_channel(request: HttpRequest, channel: int) -> JsonResponse:
     data = [
         {
             'name': ranking.name,
@@ -78,7 +81,7 @@ def getRankingsbyChannel(request: HttpRequest, channel: int) -> JsonResponse:
     ]
     return JsonResponse(data, safe = False)
 
-def getRanking(request: HttpRequest, rid: int) -> JsonResponse:
+def get_ranking(request: HttpRequest, rid: int) -> JsonResponse:
     ranking = Ranking.objects.get(rid = rid)
     data = {
         'name': ranking.name,
@@ -89,7 +92,7 @@ def getRanking(request: HttpRequest, rid: int) -> JsonResponse:
     }
     return JsonResponse(data, safe = False)
 
-def getRankingsbySearch(request: HttpRequest) -> JsonResponse:
+def get_rankings_by_search(request: HttpRequest) -> JsonResponse:
     channel = request.GET.get('channel')
     character = request.GET.get('character')
     data = [
@@ -104,17 +107,82 @@ def getRankingsbySearch(request: HttpRequest) -> JsonResponse:
     ]
     return JsonResponse(data, safe = False)
 
+def create_ranking(request: HttpRequest) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            ranking = Ranking.objects.create(
+                name = body['name'],
+                character = body['character'],
+                channel = body['channel']
+            )
+            data = {
+                'name': ranking.name,
+                'rid': ranking.rid,
+                'character': ranking.character,
+                'channel': ranking.channel,
+                'date': ranking.date,
+            }
+            return JsonResponse(data, safe = False, status = 201)
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        except IntegrityError as e:
+            return error("Internal server error", 500)
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+
+def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            ranking = Ranking.objects.get(rid = rid)
+            ranking.name = body.get('name', ranking.name)
+            ranking.character = body.get('character', ranking.character)
+            ranking.channel = body.get('channel', ranking.channel)
+            ranking.save()
+            data = {
+                'name': ranking.name,
+                'rid': ranking.rid,
+                'character': ranking.character,
+                'channel': ranking.channel,
+                'date': ranking.date,
+            }
+            return JsonResponse(data, safe = False)
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        except Ranking.DoesNotExist:
+            return error('Ranking not found', 404)
+        except IntegrityError as e:
+            return error("Internal server error", 500)
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+
+def delete_ranking(request: HttpRequest, rid: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+        ranking.delete()
+        return JsonResponse({}, status = 204)
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+
 urlpatterns = [
     path('', response_wrapper(
-        get = getRankings,
-    ), name = 'getRanking'),
+        get = get_rankings,
+        post = create_ranking,
+    ), name = 'Rankings'),
     path('channel/<int:channel>/', response_wrapper(
-        get = getRankingsbyChannel,
-    ), name = 'getRankingsbyChannel'),
+        get = get_rankings_by_channel,
+    ), name = 'Ranking by Channel'),
     path('rid/<int:rid>/', response_wrapper(
-        get = getRanking,
-    ), name = 'getRanking'),
+        get = get_ranking,
+        put = update_ranking,
+        delete = delete_ranking,
+    ), name = 'Ranking by RID'),
     path('search/', response_wrapper(
-        get = getRankingsbySearch,
-    ), name = 'getRankingsbySearch'),
+        get = get_rankings_by_search,
+    ), name = 'Ranking by Search'),
 ]
