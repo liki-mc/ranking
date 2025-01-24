@@ -21,6 +21,8 @@ from .models import Ranking, Entry
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 
+from django.views.decorators.csrf import csrf_exempt
+
 from typing import Callable
 
 def error(message: str, status: int) -> JsonResponse:
@@ -32,6 +34,10 @@ def response_wrapper(
         put: Callable[[HttpRequest, ...], JsonResponse] = None,
         delete: Callable[[HttpRequest, ...], JsonResponse] = None
 ) -> Callable[[HttpRequest, ...], JsonResponse]:
+    # post = csrf_exempt(post) if post is not None else None
+    # put = csrf_exempt(put) if put is not None else None
+    # delete = csrf_exempt(delete) if delete is not None else None
+
     def wrapper(request: HttpRequest, *args, **kwargs) -> JsonResponse:
         match request.method:
             case 'GET':
