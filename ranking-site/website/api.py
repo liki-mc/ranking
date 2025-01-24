@@ -89,6 +89,12 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
     if request.content_type == 'application/json':
         try:
             body = json.loads(request.body)
+            
+            # check if ranking already exists and is active
+            possible_ranking = Ranking.objects.filter(character = body['character'], channel = body['channel'], active = True)
+            if possible_ranking.exists():
+                return error('Ranking already exists and is active', 409)
+            
             ranking = Ranking.objects.create(
                 name = body['name'],
                 character = body['character'],
@@ -114,11 +120,21 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
 def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
     if request.content_type == 'application/json':
         try:
+                
             body = json.loads(request.body)
             ranking = Ranking.objects.get(rid = rid)
+            
             ranking.name = body.get('name', ranking.name)
             ranking.character = body.get('character', ranking.character)
             ranking.channel = body.get('channel', ranking.channel)
+            
+            # check if a ranking already exists for this channel and token and is active
+            if body.get("active", False) and not ranking.active:
+                possible_ranking = Ranking.objects.filter(character = ranking.character, channel = ranking.channel, active = True)
+                if possible_ranking.exists():
+                    return error('Ranking already exists and is active', 409)
+                
+            ranking.active = body.get('active', ranking.active)
             ranking.save()
             data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False)
@@ -145,6 +161,15 @@ def delete_ranking(request: HttpRequest, rid: int) -> JsonResponse:
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
 
+def deactivate_ranking(request: HttpRequest, rid: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+        ranking.active = False
+        ranking.save()
+        return JsonResponse({}, status = 204)
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+
 def get_entries(request: HttpRequest, rid: int) -> JsonResponse:
     data = serialize_entries(Entry.objects.filter(ranking__rid = rid))
     return JsonResponse(data, safe = False)
@@ -162,6 +187,10 @@ def create_entry(request: HttpRequest, rid: int) -> JsonResponse:
         try:
             body = json.loads(request.body)
             ranking = Ranking.objects.get(rid = rid)
+
+            if not ranking.active:
+                return error('Ranking is not active', 403)
+            
             entry = Entry.objects.create(
                 ranking = ranking,
                 number = body['number'],
@@ -191,6 +220,9 @@ def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
         try:
             body = json.loads(request.body)
             entry = Entry.objects.get(ranking__rid = rid, id = eid)
+            if not entry.ranking.active:
+                return error('Ranking is not active', 403)
+            
             entry.number = body.get('number', entry.number)
             entry.user = body.get('user', entry.user)
             entry.save()
@@ -214,6 +246,9 @@ def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
 def delete_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
     try:
         entry = Entry.objects.get(ranking__rid = rid, id = eid)
+        if not entry.ranking.active:
+            return error('Ranking is not active', 403)
+        
         entry.delete()
         return JsonResponse({}, status = 204)
     except Entry.DoesNotExist:
@@ -248,6 +283,9 @@ urlpatterns = [
         put = update_ranking,
         delete = delete_ranking,
     ), name = 'Ranking by RID'),
+    path('<int:rid>/deactivate/', response_wrapper(
+        post = deactivate_ranking,
+    ), name = 'Deactivate Ranking'),
     path('search/', response_wrapper(
         get = get_rankings_by_search,
     ), name = 'Ranking by Search'),
