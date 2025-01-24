@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 import json
-from django.urls import path
+from django.urls import include, path
 from django.http import JsonResponse, HttpRequest
 from .models import Ranking, Entry
 from django.db.utils import IntegrityError
@@ -57,8 +57,8 @@ def response_wrapper(
 serialize_ranking: Callable[[Ranking], dict[str, any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
 serialize_rankings: Callable[[list[Ranking]], list[dict[str, any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
 
-serialize_entry: Callable[[Entry], dict[str, any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date}
-serialize_entries: Callable[[list[Entry]], list[dict[str, any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date} for entry in entries]
+serialize_entry: Callable[[Entry], dict[str, any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id}
+serialize_entries: Callable[[list[Entry]], list[dict[str, any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id} for entry in entries]
 
 def get_rankings(request: HttpRequest) -> JsonResponse:
     print(request)
@@ -99,6 +99,9 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
         
         except ValidationError as e:
             return error(e.message_dict, 400)
+        
+        except KeyError as e:
+            return error(f"Missing field {e}", 400)
     else:
         return error("Content-Type must be application/json", 400)
 
@@ -113,12 +116,16 @@ def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
             ranking.save()
             data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False)
+        
         except json.JSONDecodeError:
             return error('Invalid JSON', 400)
+        
         except Ranking.DoesNotExist:
             return error('Ranking not found', 404)
+        
         except IntegrityError as e:
             return error("Internal server error", 500)
+        
         except ValidationError as e:
             return error(e.message_dict, 400)
     else:
@@ -131,6 +138,94 @@ def delete_ranking(request: HttpRequest, rid: int) -> JsonResponse:
         return JsonResponse({}, status = 204)
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
+
+def get_entries(request: HttpRequest, rid: int) -> JsonResponse:
+    data = serialize_entries(Entry.objects.filter(ranking__rid = rid))
+    return JsonResponse(data, safe = False)
+
+def get_entries_by_user(request: HttpRequest, rid: int, user: int) -> JsonResponse:
+    data = serialize_entries(Entry.objects.filter(ranking__rid = rid, user = user))
+    return JsonResponse(data, safe = False)
+
+def get_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
+    data = serialize_entry(Entry.objects.get(ranking__rid = rid, id = eid))
+    return JsonResponse(data, safe = False)
+
+def create_entry(request: HttpRequest, rid: int) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            ranking = Ranking.objects.get(rid = rid)
+            entry = Entry.objects.create(
+                ranking = ranking,
+                number = body['number'],
+                user = body['user']
+            )
+            data = serialize_entry(entry)
+            return JsonResponse(data, safe = False, status = 201)
+        
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        
+        except IntegrityError as e:
+            return error("Internal server error", 500)
+        
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+        
+        except KeyError as e:
+            return error(f"Missing field {e}", 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+
+def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            entry = Entry.objects.get(ranking__rid = rid, id = eid)
+            entry.number = body.get('number', entry.number)
+            entry.user = body.get('user', entry.user)
+            entry.save()
+            data = serialize_entry(entry)
+            return JsonResponse(data, safe = False)
+        
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        
+        except Entry.DoesNotExist:
+            return error('Entry not found', 404)
+        
+        except IntegrityError as e:
+            return error("Internal server error", 500)
+        
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+    
+def delete_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
+    try:
+        entry = Entry.objects.get(ranking__rid = rid, id = eid)
+        entry.delete()
+        return JsonResponse({}, status = 204)
+    except Entry.DoesNotExist:
+        return error('Entry not found', 404)
+
+
+entry_urls = [
+    path('', response_wrapper(
+        get = get_entries,
+        post = create_entry,
+    ), name = 'Entries'),
+    path('user/<int:user>/', response_wrapper(
+        get = get_entries_by_user,
+    ), name = 'Entries by User'),
+    path('eid/<int:eid>/', response_wrapper(
+        get = get_entry,
+        put = update_entry,
+        delete = delete_entry,
+    ), name = 'Entry by rid'),
+]
 
 urlpatterns = [
     path('', response_wrapper(
@@ -148,4 +243,5 @@ urlpatterns = [
     path('search/', response_wrapper(
         get = get_rankings_by_search,
     ), name = 'Ranking by Search'),
+    path('rid/<int:rid>/entries/', include(entry_urls)),
 ]
