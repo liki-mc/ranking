@@ -16,6 +16,7 @@ class Entry(models.Model):
     number = models.IntegerField(default = 1)
     user = models.IntegerField(blank = False)
     date = models.DateTimeField("date published", auto_now_add = True)
+    message_id = models.IntegerField()
     
     def __str__(self):
         return f"{self.user}, {self.number}"

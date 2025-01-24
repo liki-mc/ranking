@@ -8,7 +8,7 @@ class Example(Cog):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="example")
+    @app_commands.command(name = "example")
     async def example(self, ia: Interaction):
         return await ia.response.send_message("example command")
 

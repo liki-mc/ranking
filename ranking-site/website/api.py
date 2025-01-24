@@ -63,8 +63,8 @@ def response_wrapper(
 serialize_ranking: Callable[[Ranking], dict[str, any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
 serialize_rankings: Callable[[list[Ranking]], list[dict[str, any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
 
-serialize_entry: Callable[[Entry], dict[str, any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id}
-serialize_entries: Callable[[list[Entry]], list[dict[str, any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id} for entry in entries]
+serialize_entry: Callable[[Entry], dict[str, any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
+serialize_entries: Callable[[list[Entry]], list[dict[str, any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
 
 def get_rankings(request: HttpRequest) -> JsonResponse:
     print(request)
