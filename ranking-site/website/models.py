@@ -7,6 +7,7 @@ class Ranking(models.Model):
     character = models.CharField(max_length = 200, default = "+")
     channel = models.IntegerField()
     date = models.DateTimeField("date published", auto_now_add = True)
+    active = models.BooleanField(default = True)
     
     def __str__(self):
         return self.name
