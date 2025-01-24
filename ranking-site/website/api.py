@@ -23,17 +23,17 @@ from django.core.exceptions import ValidationError
 
 from django.views.decorators.csrf import csrf_exempt
 
-from typing import Callable
+from typing import Callable, Any
 
 def error(message: str, status: int) -> JsonResponse:
     return JsonResponse({'error': message}, status = status)
 
 def response_wrapper(
-        get: Callable[[HttpRequest, ...], JsonResponse] = None,
-        post: Callable[[HttpRequest, ...], JsonResponse] = None,
-        put: Callable[[HttpRequest, ...], JsonResponse] = None,
-        delete: Callable[[HttpRequest, ...], JsonResponse] = None
-) -> Callable[[HttpRequest, ...], JsonResponse]:
+        get: Callable[[HttpRequest, Any], JsonResponse] = None,
+        post: Callable[[HttpRequest, Any], JsonResponse] = None,
+        put: Callable[[HttpRequest, Any], JsonResponse] = None,
+        delete: Callable[[HttpRequest, Any], JsonResponse] = None
+) -> Callable[[HttpRequest, Any], JsonResponse]:
     # post = csrf_exempt(post) if post is not None else None
     # put = csrf_exempt(put) if put is not None else None
     # delete = csrf_exempt(delete) if delete is not None else None
@@ -60,11 +60,11 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-serialize_ranking: Callable[[Ranking], dict[str, any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
-serialize_rankings: Callable[[list[Ranking]], list[dict[str, any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
+serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
 
-serialize_entry: Callable[[Entry], dict[str, any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
-serialize_entries: Callable[[list[Entry]], list[dict[str, any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
+serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
+serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
 
 def get_rankings(request: HttpRequest) -> JsonResponse:
     print(request)
