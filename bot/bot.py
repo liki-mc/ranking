@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 from contextlib import suppress
 import logging
@@ -11,12 +12,14 @@ logger = logging.getLogger("bot")
 
 class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
-        intents = discord.Intents.default()
+        intents = discord.Intents.all()
         intents.message_content = True
 
         self.logger = logger
+        connector = aiohttp.TCPConnector(ssl = False)
+        self.session = aiohttp.ClientSession(connector = connector)
 
-        super().__init__(command_prefix="$", *args, intents=intents, **kwargs)
+        super().__init__(command_prefix = "*", *args, intents = intents, **kwargs)
 
     async def load_extensions(self) -> None:
         from bot.extensions import EXTENSIONS
@@ -40,3 +43,7 @@ class Bot(commands.Bot):
 
     async def on_command_error(self, context, exception):
         self.logger.error(f"{context}\n{exception}")
+
+    async def close(self):
+        await self.session.close()
+        await super().close()

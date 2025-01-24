@@ -6,6 +6,8 @@ services:
         restart: "no"
         secrets:
           - discord_token
+        ports:
+          - "8000:8000"
 
 secrets:
     discord_token:

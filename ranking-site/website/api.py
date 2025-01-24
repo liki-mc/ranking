@@ -165,7 +165,8 @@ def create_entry(request: HttpRequest, rid: int) -> JsonResponse:
             entry = Entry.objects.create(
                 ranking = ranking,
                 number = body['number'],
-                user = body['user']
+                user = body['user'],
+                message_id = body['message_id']
             )
             data = serialize_entry(entry)
             return JsonResponse(data, safe = False, status = 201)
@@ -174,6 +175,7 @@ def create_entry(request: HttpRequest, rid: int) -> JsonResponse:
             return error('Invalid JSON', 400)
         
         except IntegrityError as e:
+            print(e)
             return error("Internal server error", 500)
         
         except ValidationError as e:
@@ -241,7 +243,7 @@ urlpatterns = [
     path('channel/<int:channel>/', response_wrapper(
         get = get_rankings_by_channel,
     ), name = 'Ranking by Channel'),
-    path('rid/<int:rid>/', response_wrapper(
+    path('<int:rid>/', response_wrapper(
         get = get_ranking,
         put = update_ranking,
         delete = delete_ranking,
@@ -249,5 +251,5 @@ urlpatterns = [
     path('search/', response_wrapper(
         get = get_rankings_by_search,
     ), name = 'Ranking by Search'),
-    path('rid/<int:rid>/entries/', include(entry_urls)),
+    path('<int:rid>/entries/', include(entry_urls)),
 ]
