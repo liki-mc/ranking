@@ -1,11 +1,19 @@
 {% extends 'general/base.html' %}
 
 {% block title %}
-    {{ ranking.name }}
+    {{ ranking_details.name }}
 {% endblock %}
 
 {% block body %}
-    <h1>{{ ranking.name }}</h1>
-
+    <h1>{{ ranking_details.name }}</h1>
+    {% if user_ranking %}
+    <ol>
+        {% for user in user_ranking %}
+            <li>{{ user.user }} - {{ user.total_sum }}</li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p>Geen data</p>
+    {% endif %}
 {% endblock %}
 
