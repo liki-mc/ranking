@@ -14,7 +14,7 @@ class Ranking(models.Model):
 
 class Entry(models.Model):
     ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
-    number = models.IntegerField(default = 1)
+    number = models.FloatField(default = 1)
     user = models.IntegerField(blank = False)
     date = models.DateTimeField("date published", auto_now_add = True)
     message_id = models.IntegerField()
