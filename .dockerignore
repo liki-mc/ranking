@@ -1,5 +1,6 @@
 venv/
 secrets/
+ranking-site/
 
 .dockerignore
 .gitignore
