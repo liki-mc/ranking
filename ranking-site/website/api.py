@@ -291,6 +291,19 @@ def delete_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
     except Entry.DoesNotExist:
         return error('Entry not found', 404)
 
+def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+    
+    data = {}
+    for entry in Entry.objects.filter(ranking = ranking):
+        data[entry.user] = data.get(entry.user, 0) + entry.number
+
+    return JsonResponse(data, safe = False)
+
 
 entry_urls = [
     path('', response_wrapper(
@@ -327,4 +340,7 @@ urlpatterns = [
         get = get_rankings_by_search,
     ), name = 'Ranking by Search'),
     path('<int:rid>/entries/', include(entry_urls)),
+    path('<int:rid>/scores/', response_wrapper(
+        get = get_scores,
+    ), name = 'Scores'),
 ]

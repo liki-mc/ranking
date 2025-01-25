@@ -6,7 +6,7 @@ from bot.bot import Bot
 import re
 
 URL = "http://host.docker.internal:8000"
-path = "/api/ranking/"
+path = "/api/v1/ranking/"
 
 class Example(commands.Cog):
     def __init__(self, bot: Bot) -> None:
@@ -46,6 +46,15 @@ class Example(commands.Cog):
             self.channels.setdefault(ctx.channel.id, []).append((token, rid))
             return await ctx.send("Created ranking")
         return await ctx.send("pong")
+    
+    @staticmethod
+    def to_float(s: str) -> float:
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+        except TypeError:
+            return 0.0
 
     @commands.Cog.listener("on_message")
     async def example_listener(self, msg: Message):
@@ -64,9 +73,9 @@ class Example(commands.Cog):
         try:
             for token, rid in tokens:
                 s = 0
-                for match in re.finditer(f"(?:{re.escape(token)}) ?(\d+)", msg.content):
+                for match in re.finditer(f"(?:{re.escape(token)}) ?(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)", msg.content):
                     self.bot.logger.info(f"found match: {match.group(1)}")
-                    s += int(match.group(1))
+                    s += self.to_float(match.group(1))
                 
                 if s:
                     # add to database
