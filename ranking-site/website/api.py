@@ -60,8 +60,8 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date}
-serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
+serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active} for ranking in rankings]
 
 serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
 serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]

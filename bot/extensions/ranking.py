@@ -76,7 +76,32 @@ class RankingCog(commands.Cog):
             rid = (await resp.json())["rid"]
             self.channels.setdefault(ctx.channel.id, []).append((token, rid))
             return await ctx.send("Created ranking")
-        return await ctx.send("pong")
+    
+    @commands.command()
+    @lock
+    async def list(self, ctx: commands.Context):
+        url = f"{URL}{path}channel/{ctx.channel.id}/"
+        async with self.bot.session.get(url) as resp:
+            if resp.status != 200:
+                self.bot.logger.error(f"failed to list ranking, reason: {await resp.text()}")
+                return await ctx.send("Failed to list ranking")
+            
+            data = await resp.json()
+            active = []
+            inactive = []
+            for ranking in data:
+                if ranking["active"]:
+                    active.append(ranking["name"])
+                else:
+                    inactive.append(ranking["name"])
+            
+            s = ""
+            if active:
+                s += f"## Current active ranking{'s' if len(active) > 1 else ''}:\n- " + "\n- ".join(f"{ranking}" for ranking in active) + "\n"
+            if inactive:
+                s += f"## Current inactive ranking{'s' if len(inactive) > 1 else ''}:\n- " + "\n- ".join(f"{ranking}" for ranking in inactive)
+            return await ctx.send(s)
+        
     
     @staticmethod
     def to_float(s: str) -> float:
