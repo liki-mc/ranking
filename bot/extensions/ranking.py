@@ -8,7 +8,7 @@ import re
 URL = "http://host.docker.internal:8000"
 path = "/api/v1/ranking/"
 
-class Example(commands.Cog):
+class RankingCog(commands.Cog):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
 
@@ -102,7 +102,7 @@ class Example(commands.Cog):
             self.bot.logger.error(f"{e.__class__.__name__, e}")
 
 async def setup(bot: Bot):
-    cog = Example(bot)
+    cog = RankingCog(bot)
     await cog.load_channels()
     bot.logger.info("Loaded example cog")
     await bot.add_cog(cog)
