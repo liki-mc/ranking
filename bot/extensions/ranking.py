@@ -30,7 +30,8 @@ class RankingCog(commands.Cog):
             
             data = await resp.json()
             for ranking in data:
-                self.channels.setdefault(ranking["channel"], []).append((ranking["token"], ranking["rid"]))
+                if ranking["active"]:
+                    self.channels.setdefault(ranking["channel"], []).append((ranking["token"], ranking["rid"]))
         
         self.bot.logger.info(self.channels)
     
@@ -45,7 +46,7 @@ class RankingCog(commands.Cog):
     
     @staticmethod
     def lock(func):
-        async def wrapped(self, *args, **kwargs):
+        async def wrapped(self : "RankingCog", *args, **kwargs):
             async with self._lock:
                 self._active_operations += 1
             try:
@@ -105,6 +106,37 @@ class RankingCog(commands.Cog):
     
     @commands.command()
     @lock
+    async def deactivate(self, ctx: commands.Context, rid: str):
+        try:
+            rid = int(rid)
+        except ValueError:
+            return await ctx.send("Invalid ranking id")
+        
+        rankings = self.channels.get(ctx.channel.id)
+        if rankings is None:
+            return await ctx.send("No ranking in this channel")
+        
+        index = -1
+        for i, (token, r) in enumerate(rankings):
+            self.bot.logger.info(f"{i, token, r, rid}")
+            if r == rid:
+                index = i
+
+        if index == -1:
+            return await ctx.send("No ranking with that id in this channel")
+        
+        token, _ = rankings.pop(index)
+
+        url = f"{URL}{path}/{rid}/deactivate/"
+        async with self.bot.session.post(url) as resp:
+            if resp.status != 200:
+                self.bot.logger.error(f"failed to deactivate ranking, reason: {await resp.text()}")
+                return await ctx.send("Failed to deactivate ranking")
+            
+            await ctx.send(f"Deactivated ranking #{rid}")
+    
+    @commands.command()
+    @lock
     async def restart(self, ctx: commands.Context, rid: str):
         try:
             rid = int(rid)
@@ -145,9 +177,9 @@ class RankingCog(commands.Cog):
                 self.bot.logger.error(f"failed to create ranking, reason: {await resp.text()}")
                 return await ctx.send("Failed to restart ranking")
             
-            rid = (await resp.json())["rid"]
-            self.channels.setdefault(ctx.channel.id, []).append((ranking["token"], rid))
-            return await ctx.send("Restarted ranking")
+            new_rid = (await resp.json())["rid"]
+            self.channels.setdefault(ctx.channel.id, []).append((ranking["token"], new_rid))
+            return await ctx.send(f"Restarted ranking #{rid} as #{new_rid}")
         
     
     @staticmethod
