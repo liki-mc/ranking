@@ -21,3 +21,10 @@ class Entry(models.Model):
     
     def __str__(self):
         return f"{self.user}, {self.number}"
+
+class Caffeine_content(models.Model):
+    name = models.CharField(max_length = 200, blank = False, primary_key = True)
+    caffeine = models.FloatField(default = 0)
+    
+    def __str__(self):
+        return self.name
