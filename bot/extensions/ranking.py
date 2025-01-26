@@ -1,5 +1,7 @@
+import asyncio
+
 from discord import Interaction, Message
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from bot.bot import Bot
 
@@ -13,6 +15,11 @@ class RankingCog(commands.Cog):
         self.bot = bot
 
         self.channels : dict[int, list[tuple[str | None, int]]] = {}
+
+        # Safe update of channels
+        self._lock = asyncio.Lock()
+        self._active_operations = 0
+        self.update_channels.start()
     
     async def load_channels(self):
         url = f"{URL}{path}"
@@ -25,12 +32,35 @@ class RankingCog(commands.Cog):
                 self.channels.setdefault(ranking["channel"], []).append((ranking["token"], ranking["rid"]))
         
         self.bot.logger.info(self.channels)
+    
+    @tasks.loop(minutes = 10) 
+    async def update_channels(self):
+        async with self._lock:
+            # wait until all active operations are done
+            while self._active_operations:
+                await asyncio.sleep(1)
+
+            await self.load_channels()
+    
+    @staticmethod
+    def lock(func):
+        async def wrapped(self, *args, **kwargs):
+            async with self._lock:
+                self._active_operations += 1
+            try:
+                return await func(self, *args, **kwargs)
+            finally:
+                async with self._lock:
+                    self._active_operations -= 1
+        wrapped.__name__ = func.__name__
+        return wrapped
 
     @commands.command()
     async def ping(self, ctx: commands.Context):
         return await ctx.send("pong")
     
     @commands.command()
+    @lock
     async def create(self, ctx: commands.Context, name: str, token: str = None):
         url = f"{URL}{path}"
         data = {
