@@ -60,38 +60,61 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
-serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
+serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
 
 serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
-serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
+serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
 
 def get_rankings(request: HttpRequest) -> JsonResponse:
     print(request)
     data = serialize_rankings(Ranking.objects.all())
+
+    if not data:
+        return error('Ranking not found', 404)
+    
     return JsonResponse(data, safe = False)
 
 def get_rankings_by_channel(request: HttpRequest, channel: int) -> JsonResponse:
     data = serialize_rankings(Ranking.objects.filter(channel = channel))
+
+    if not data:
+        return error('Ranking not found', 404)
+    
     return JsonResponse(data, safe = False)
 
 def get_ranking(request: HttpRequest, rid: int) -> JsonResponse:
-    data = serialize_ranking(Ranking.objects.get(rid = rid))
-    return JsonResponse(data, safe = False)
+    try:
+        ranking = serialize_ranking(Ranking.objects.get(rid = rid))
+
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+    
+    return JsonResponse(ranking, safe = False)
 
 def get_rankings_by_search(request: HttpRequest) -> JsonResponse:
     channel = request.GET.get('channel')
-    character = request.GET.get('character')
-    data = serialize_rankings(Ranking.objects.filter(channel = channel, character = character))
+    token = request.GET.get('token')
+    data = serialize_rankings(Ranking.objects.filter(channel = channel, token = token))
+
+    if not data:
+        return error('Ranking not found', 404)
+
     return JsonResponse(data, safe = False)
 
 def create_ranking(request: HttpRequest) -> JsonResponse:
     if request.content_type == 'application/json':
         try:
             body = json.loads(request.body)
+            
+            # check if ranking already exists and is active
+            possible_ranking = Ranking.objects.filter(token = body['token'], channel = body['channel'], active = True)
+            if possible_ranking.exists():
+                return error('Ranking already exists and is active', 409)
+            
             ranking = Ranking.objects.create(
                 name = body['name'],
-                character = body['character'],
+                token = body['token'],
                 channel = body['channel']
             )
             data = serialize_ranking(ranking)
@@ -101,6 +124,7 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
             return error('Invalid JSON', 400)
         
         except IntegrityError as e:
+            print(e)
             return error("Internal server error", 500)
         
         except ValidationError as e:
@@ -114,11 +138,21 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
 def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
     if request.content_type == 'application/json':
         try:
+                
             body = json.loads(request.body)
             ranking = Ranking.objects.get(rid = rid)
+            
             ranking.name = body.get('name', ranking.name)
-            ranking.character = body.get('character', ranking.character)
+            ranking.token = body.get('token', ranking.token)
             ranking.channel = body.get('channel', ranking.channel)
+            
+            # check if a ranking already exists for this channel and token and is active
+            possible_ranking = Ranking.objects.filter(token = ranking.token, channel = ranking.channel, active = True)
+            if possible_ranking.exists():
+                if possible_ranking.first().rid != ranking.rid:
+                    return error('Ranking already exists and is active', 409)
+                
+            ranking.active = body.get('active', ranking.active)
             ranking.save()
             data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False)
@@ -142,26 +176,60 @@ def delete_ranking(request: HttpRequest, rid: int) -> JsonResponse:
         ranking = Ranking.objects.get(rid = rid)
         ranking.delete()
         return JsonResponse({}, status = 204)
+    
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+
+def deactivate_ranking(request: HttpRequest, rid: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+        ranking.active = False
+        ranking.save()
+        return JsonResponse({}, status = 204)
+    
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
 
 def get_entries(request: HttpRequest, rid: int) -> JsonResponse:
-    data = serialize_entries(Entry.objects.filter(ranking__rid = rid))
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+    
+    data = serialize_entries(Entry.objects.filter(ranking = ranking))
+    
     return JsonResponse(data, safe = False)
 
 def get_entries_by_user(request: HttpRequest, rid: int, user: int) -> JsonResponse:
-    data = serialize_entries(Entry.objects.filter(ranking__rid = rid, user = user))
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+    
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+    
+    data = serialize_entries(Entry.objects.filter(ranking = ranking, user = user))
+
     return JsonResponse(data, safe = False)
 
 def get_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
-    data = serialize_entry(Entry.objects.get(ranking__rid = rid, id = eid))
-    return JsonResponse(data, safe = False)
+    try:
+        entry = serialize_entry(Entry.objects.get(ranking__rid = rid, id = eid))
+
+    except Entry.DoesNotExist:
+        return error('Entry not found', 404)
+    
+    return JsonResponse(entry, safe = False)
 
 def create_entry(request: HttpRequest, rid: int) -> JsonResponse:
     if request.content_type == 'application/json':
         try:
             body = json.loads(request.body)
             ranking = Ranking.objects.get(rid = rid)
+
+            if not ranking.active:
+                return error('Ranking is not active', 403)
+            
             entry = Entry.objects.create(
                 ranking = ranking,
                 number = body['number'],
@@ -191,6 +259,9 @@ def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
         try:
             body = json.loads(request.body)
             entry = Entry.objects.get(ranking__rid = rid, id = eid)
+            if not entry.ranking.active:
+                return error('Ranking is not active', 403)
+            
             entry.number = body.get('number', entry.number)
             entry.user = body.get('user', entry.user)
             entry.save()
@@ -214,10 +285,26 @@ def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
 def delete_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
     try:
         entry = Entry.objects.get(ranking__rid = rid, id = eid)
+        if not entry.ranking.active:
+            return error('Ranking is not active', 403)
+        
         entry.delete()
         return JsonResponse({}, status = 204)
     except Entry.DoesNotExist:
         return error('Entry not found', 404)
+
+def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+    
+    data = {}
+    for entry in Entry.objects.filter(ranking = ranking):
+        data[entry.user] = data.get(entry.user, 0) + entry.number
+
+    return JsonResponse(data, safe = False)
 
 
 entry_urls = [
@@ -248,8 +335,14 @@ urlpatterns = [
         put = update_ranking,
         delete = delete_ranking,
     ), name = 'Ranking by RID'),
+    path('<int:rid>/deactivate/', response_wrapper(
+        post = deactivate_ranking,
+    ), name = 'Deactivate Ranking'),
     path('search/', response_wrapper(
         get = get_rankings_by_search,
     ), name = 'Ranking by Search'),
     path('<int:rid>/entries/', include(entry_urls)),
+    path('<int:rid>/scores/', response_wrapper(
+        get = get_scores,
+    ), name = 'Scores'),
 ]
