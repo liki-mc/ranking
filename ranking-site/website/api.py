@@ -84,12 +84,13 @@ def get_rankings_by_channel(request: HttpRequest, channel: int) -> JsonResponse:
     return JsonResponse(data, safe = False)
 
 def get_ranking(request: HttpRequest, rid: int) -> JsonResponse:
-    data = serialize_ranking(Ranking.objects.get(rid = rid))
+    try:
+        ranking = serialize_ranking(Ranking.objects.get(rid = rid))
 
-    if not data:
+    except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
     
-    return JsonResponse(data, safe = False)
+    return JsonResponse(ranking, safe = False)
 
 def get_rankings_by_search(request: HttpRequest) -> JsonResponse:
     channel = request.GET.get('channel')
