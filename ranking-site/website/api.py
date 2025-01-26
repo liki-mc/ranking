@@ -17,7 +17,7 @@ Including another URLconf
 import json
 from django.urls import include, path
 from django.http import JsonResponse, HttpRequest
-from .models import Ranking, Entry
+from .models import Ranking, Entry, Caffeine_content as CaffeineContent
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
 
@@ -164,6 +164,7 @@ def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
             return error('Ranking not found', 404)
         
         except IntegrityError as e:
+            print(e)
             return error("Internal server error", 500)
         
         except ValidationError as e:
@@ -275,6 +276,7 @@ def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
             return error('Entry not found', 404)
         
         except IntegrityError as e:
+            print(e)
             return error("Internal server error", 500)
         
         except ValidationError as e:
@@ -306,6 +308,78 @@ def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
 
     return JsonResponse(data, safe = False)
 
+def get_caffeines(request: HttpRequest) -> JsonResponse:
+    data = {c.name: c.caffeine for c in CaffeineContent.objects.all()}
+    return JsonResponse(data, safe = False)
+
+def get_caffeine(request: HttpRequest, name: str) -> JsonResponse:
+    try:
+        caffeine = CaffeineContent.objects.get(name = name)
+        data = {caffeine.name: caffeine.caffeine}
+        return JsonResponse(data, safe = False)
+    
+    except CaffeineContent.DoesNotExist:
+        return error('Caffeine content not found', 404)
+
+def create_caffeine(request: HttpRequest) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            caffeine = CaffeineContent.objects.create(
+                name = body['name'],
+                caffeine = body['caffeine']
+            )
+            data = {caffeine.name: caffeine.caffeine}
+            return JsonResponse(data, safe = False, status = 201)
+        
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        
+        except IntegrityError as e:
+            print(e)
+            return error("Internal server error", 500)
+        
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+        
+        except KeyError as e:
+            return error(f"Missing field {e}", 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+
+def update_caffeine(request: HttpRequest, name: str) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            caffeine = CaffeineContent.objects.get(name = name)
+            caffeine.caffeine = body.get('caffeine', caffeine.caffeine)
+            caffeine.save()
+            data = {caffeine.name: caffeine.caffeine}
+            return JsonResponse(data, safe = False)
+        
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        
+        except CaffeineContent.DoesNotExist:
+            return error('Caffeine content not found', 404)
+        
+        except IntegrityError as e:
+            print(e)
+            return error("Internal server error", 500)
+        
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+
+def delete_caffeine(request: HttpRequest, name: str) -> JsonResponse:
+    try:
+        caffeine = CaffeineContent.objects.get(name = name)
+        caffeine.delete()
+        return JsonResponse({}, status = 204)
+    
+    except CaffeineContent.DoesNotExist:
+        return error('Caffeine content not found', 404)
 
 entry_urls = [
     path('', response_wrapper(
@@ -320,6 +394,18 @@ entry_urls = [
         put = update_entry,
         delete = delete_entry,
     ), name = 'Entry by rid'),
+]
+
+caffeine_urls = [
+    path('', response_wrapper(
+        get = get_caffeines,
+        post = create_caffeine,
+    ), name = 'Caffeine Content'),
+    path('<str:name>/', response_wrapper(
+        get = get_caffeine,
+        put = update_caffeine,
+        delete = delete_caffeine,
+    ), name = 'Caffeine Content by Name'),
 ]
 
 urlpatterns = [
@@ -345,4 +431,5 @@ urlpatterns = [
     path('<int:rid>/scores/', response_wrapper(
         get = get_scores,
     ), name = 'Scores'),
+    path('caffeine/', include(caffeine_urls)),
 ]
