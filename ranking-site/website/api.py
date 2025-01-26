@@ -230,10 +230,23 @@ def create_entry(request: HttpRequest, rid: int) -> JsonResponse:
             if not ranking.active:
                 return error('Ranking is not active', 403)
             
+            uid = body['user'] 
+            if not User.objects.filter(uid = uid).exists():
+                if not body.get('username'):
+                    return error('User not found', 404)
+                
+                user = User.objects.create(
+                    uid = uid,
+                    name = body['username']
+                )
+
+            else:
+                user = User.objects.get(uid = uid)
+            
             entry = Entry.objects.create(
                 ranking = ranking,
                 number = body['number'],
-                user = body['user'],
+                user = user,
                 message_id = body['message_id']
             )
             data = serialize_entry(entry)
@@ -262,8 +275,22 @@ def update_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
             if not entry.ranking.active:
                 return error('Ranking is not active', 403)
             
+            uid = body.get('user')
+            if uid and uid != entry.user.uid:
+                if not User.objects.filter(uid = uid).exists():
+                    if not body.get('username'):
+                        return error('User not found', 404)
+                    
+                    user = User.objects.create(
+                        uid = uid,
+                        name = body['username']
+                    )
+
+                else:
+                    user = User.objects.get(uid = uid)
+                entry.user = user
+            
             entry.number = body.get('number', entry.number)
-            entry.user = body.get('user', entry.user)
             entry.save()
             data = serialize_entry(entry)
             return JsonResponse(data, safe = False)
@@ -301,9 +328,24 @@ def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
     
-    data = {}
+    data: dict[User, float] = {}
+    for entry in Entry.objects.filter(ranking = ranking):
+        data[entry.user.uid] = data.get(entry.user.uid, 0) + entry.number
+
+    return JsonResponse(data, safe = False)
+
+def get_name_scores(request: HttpRequest, rid: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+    
+    data: dict[str, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
         data[entry.user] = data.get(entry.user, 0) + entry.number
+    
+    data = {user.name : score for user, score in data.items()}
 
     return JsonResponse(data, safe = False)
 
@@ -515,6 +557,9 @@ urlpatterns = [
     path('<int:rid>/scores/', response_wrapper(
         get = get_scores,
     ), name = 'Scores'),
+    path('<int:rid>/name_scores/', response_wrapper(
+        get = get_name_scores,
+    ), name = 'Name Scores'),
     path('caffeine/', include(caffeine_urls)),
     path('users/', include(user_urls)),
 ]
