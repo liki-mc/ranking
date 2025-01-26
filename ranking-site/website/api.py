@@ -185,7 +185,8 @@ def deactivate_ranking(request: HttpRequest, rid: int) -> JsonResponse:
         ranking = Ranking.objects.get(rid = rid)
         ranking.active = False
         ranking.save()
-        return JsonResponse({}, status = 204)
+        data = serialize_ranking(ranking)
+        return JsonResponse(data, status = 200)
     
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)

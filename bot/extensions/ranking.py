@@ -8,7 +8,7 @@ from bot.bot import Bot
 import re
 
 URL = "http://host.docker.internal:8000"
-path = "/api/v1/ranking/"
+path = "/api/v1/ranking"
 
 class RankingCog(commands.Cog):
     def __init__(self, bot: Bot) -> None:
@@ -22,7 +22,8 @@ class RankingCog(commands.Cog):
         self.update_channels.start()
     
     async def load_channels(self):
-        url = f"{URL}{path}"
+        self.channels.clear()
+        url = f"{URL}{path}/"
         async with self.bot.session.get(url) as resp:
             if resp.status != 200:
                 return print(await resp.text())
@@ -62,7 +63,7 @@ class RankingCog(commands.Cog):
     @commands.command()
     @lock
     async def create(self, ctx: commands.Context, name: str, token: str = None):
-        url = f"{URL}{path}"
+        url = f"{URL}{path}/"
         data = {
             "name": name,
             "token": token,
@@ -79,28 +80,74 @@ class RankingCog(commands.Cog):
     
     @commands.command()
     @lock
-    async def list(self, ctx: commands.Context):
-        url = f"{URL}{path}channel/{ctx.channel.id}/"
+    async def list(self, ctx: commands.Context, inactive: str = None):
+        url = f"{URL}{path}/channel/{ctx.channel.id}/"
         async with self.bot.session.get(url) as resp:
             if resp.status != 200:
                 self.bot.logger.error(f"failed to list ranking, reason: {await resp.text()}")
                 return await ctx.send("Failed to list ranking")
             
             data = await resp.json()
-            active = []
-            inactive = []
+            active_list = []
+            inactive_list = []
             for ranking in data:
                 if ranking["active"]:
-                    active.append(ranking["name"])
+                    active_list.append(f'{ranking["name"]} (#{ranking["rid"]})')
                 else:
-                    inactive.append(ranking["name"])
+                    inactive_list.append(f'{ranking["name"]} (#{ranking["rid"]})')
             
             s = ""
-            if active:
-                s += f"## Current active ranking{'s' if len(active) > 1 else ''}:\n- " + "\n- ".join(f"{ranking}" for ranking in active) + "\n"
-            if inactive:
-                s += f"## Current inactive ranking{'s' if len(inactive) > 1 else ''}:\n- " + "\n- ".join(f"{ranking}" for ranking in inactive)
+            if active_list:
+                s += f"## Current active ranking{'s' if len(active_list) > 1 else ''}:\n- " + "\n- ".join(f"{ranking}" for ranking in active_list) + "\n"
+            if inactive_list and inactive == "all":
+                s += f"## Current inactive ranking{'s' if len(inactive_list) > 1 else ''}:\n- " + "\n- ".join(f"{ranking}" for ranking in inactive_list)
             return await ctx.send(s)
+    
+    @commands.command()
+    @lock
+    async def restart(self, ctx: commands.Context, rid: str):
+        try:
+            rid = int(rid)
+        except ValueError:
+            return await ctx.send("Invalid ranking id")
+        
+        rankings = self.channels.get(ctx.channel.id)
+        if rankings is None:
+            return await ctx.send("No ranking in this channel")
+        
+        index = -1
+        for i, (token, r) in enumerate(rankings):
+            self.bot.logger.info(f"{i, token, r, rid}")
+            if r == rid:
+                index = i
+
+        if index == -1:
+            return await ctx.send("No ranking with that id in this channel")
+        
+        token, _ = rankings.pop(index)
+
+        url = f"{URL}{path}/{rid}/deactivate/"
+        async with self.bot.session.post(url) as resp:
+            if resp.status != 200:
+                self.bot.logger.error(f"failed to deactivate ranking, reason: {await resp.text()}")
+                return await ctx.send("Failed to restart ranking")
+            
+            ranking = await resp.json()
+        
+        url = f"{URL}{path}/"
+        data = {
+            "name": ranking["name"],
+            "token": ranking["token"],
+            "channel": ranking["channel"]
+        }
+        async with self.bot.session.post(url, json = data) as resp:
+            if resp.status != 201:
+                self.bot.logger.error(f"failed to create ranking, reason: {await resp.text()}")
+                return await ctx.send("Failed to restart ranking")
+            
+            rid = (await resp.json())["rid"]
+            self.channels.setdefault(ctx.channel.id, []).append((ranking["token"], rid))
+            return await ctx.send("Restarted ranking")
         
     
     @staticmethod
@@ -158,6 +205,5 @@ class RankingCog(commands.Cog):
 
 async def setup(bot: Bot):
     cog = RankingCog(bot)
-    await cog.load_channels()
     bot.logger.info("Loaded example cog")
     await bot.add_cog(cog)
