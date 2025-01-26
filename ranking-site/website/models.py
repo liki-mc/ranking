@@ -4,7 +4,7 @@ from django.db import models
 class Ranking(models.Model):
     name = models.CharField(max_length = 200, blank = False)
     rid = models.AutoField(primary_key = True)
-    token = models.CharField(max_length = 200, default = None)
+    token = models.CharField(max_length = 200, null = True, blank = True)
     channel = models.IntegerField()
     date = models.DateTimeField("date published", auto_now_add = True)
     active = models.BooleanField(default = True)

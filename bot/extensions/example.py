@@ -12,7 +12,7 @@ class Example(commands.Cog):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
 
-        self.channels : dict[int, list[tuple[str, int]]] = {}
+        self.channels : dict[int, list[tuple[str | None, int]]] = {}
     
     async def load_channels(self):
         url = f"{URL}{path}"
@@ -22,7 +22,7 @@ class Example(commands.Cog):
             
             data = await resp.json()
             for ranking in data:
-                self.channels.setdefault(ranking["channel"], []).append((ranking["character"], ranking["rid"]))
+                self.channels.setdefault(ranking["channel"], []).append((ranking["token"], ranking["rid"]))
         
         self.bot.logger.info(self.channels)
 
@@ -31,15 +31,16 @@ class Example(commands.Cog):
         return await ctx.send("pong")
     
     @commands.command()
-    async def create(self, ctx: commands.Context, name: str, token: str):
+    async def create(self, ctx: commands.Context, name: str, token: str = None):
         url = f"{URL}{path}"
         data = {
             "name": name,
-            "character": token,
+            "token": token,
             "channel": ctx.channel.id
         }
         async with self.bot.session.post(url, json = data) as resp:
             if resp.status != 201:
+                self.bot.logger.error(f"failed to create ranking, reason: {await resp.text()}")
                 return await ctx.send("Failed to create ranking")
             
             rid = (await resp.json())["rid"]
@@ -72,9 +73,9 @@ class Example(commands.Cog):
         self.bot.logger.info(f"tokens: {tokens}")
         try:
             for token, rid in tokens:
-                s = 0
-                for match in re.finditer(f"(?:{re.escape(token)}) ?(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)", msg.content):
-                    self.bot.logger.info(f"found match: {match.group(1)}")
+                s = 0.0
+                regex_string = f"(?:{re.escape(token)}) ?(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-]\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
+                for match in re.finditer(regex_string, msg.content):
                     s += self.to_float(match.group(1))
                 
                 if s:
@@ -85,7 +86,7 @@ class Example(commands.Cog):
                         "number": s,
                         "message_id": msg.id
                     }
-                    self.bot.logger.info(f"posting to {url}")
+                    self.bot.logger.info(f"posting {data} to {url}")
                     async with self.bot.session.post(url, json = data) as resp:
                         if resp.status != 201:
                             self.bot.logger.error(f"failed to post to {url}, reason: {await resp.text()}")

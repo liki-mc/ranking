@@ -60,8 +60,8 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date}
-serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "character": ranking.character, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
+serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
 
 serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
 serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
@@ -93,8 +93,8 @@ def get_ranking(request: HttpRequest, rid: int) -> JsonResponse:
 
 def get_rankings_by_search(request: HttpRequest) -> JsonResponse:
     channel = request.GET.get('channel')
-    character = request.GET.get('character')
-    data = serialize_rankings(Ranking.objects.filter(channel = channel, character = character))
+    token = request.GET.get('token')
+    data = serialize_rankings(Ranking.objects.filter(channel = channel, token = token))
 
     if not data:
         return error('Ranking not found', 404)
@@ -107,13 +107,13 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
             body = json.loads(request.body)
             
             # check if ranking already exists and is active
-            possible_ranking = Ranking.objects.filter(character = body['character'], channel = body['channel'], active = True)
+            possible_ranking = Ranking.objects.filter(token = body['token'], channel = body['channel'], active = True)
             if possible_ranking.exists():
                 return error('Ranking already exists and is active', 409)
             
             ranking = Ranking.objects.create(
                 name = body['name'],
-                character = body['character'],
+                token = body['token'],
                 channel = body['channel']
             )
             data = serialize_ranking(ranking)
@@ -123,6 +123,7 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
             return error('Invalid JSON', 400)
         
         except IntegrityError as e:
+            print(e)
             return error("Internal server error", 500)
         
         except ValidationError as e:
@@ -141,11 +142,11 @@ def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
             ranking = Ranking.objects.get(rid = rid)
             
             ranking.name = body.get('name', ranking.name)
-            ranking.character = body.get('character', ranking.character)
+            ranking.token = body.get('token', ranking.token)
             ranking.channel = body.get('channel', ranking.channel)
             
             # check if a ranking already exists for this channel and token and is active
-            possible_ranking = Ranking.objects.filter(character = ranking.character, channel = ranking.channel, active = True)
+            possible_ranking = Ranking.objects.filter(token = ranking.token, channel = ranking.channel, active = True)
             if possible_ranking.exists():
                 if possible_ranking.first().rid != ranking.rid:
                     return error('Ranking already exists and is active', 409)
