@@ -268,6 +268,48 @@ class RankingCog(commands.Cog):
         
         return await ctx.send("Reset ranking(s)")
 
+    @commands.command()
+    @lock
+    async def set(self, ctx: commands.Context, number: str, uid: str = None, rid: str = None):
+        if uid is None:
+            try:
+                number = float(number)
+            except ValueError:
+                return await ctx.send("Invalid number")
+            uid = ctx.author.id
+        
+        else:
+            try:
+                uid, number = int(number), float(uid)
+            except ValueError:
+                return await ctx.send("Invalid number or user id")
+        
+        self.bot.logger.info(f"setting {uid} to {number}")
+        if rid is None:
+            rids = [r for _, r in self.channels.get(ctx.channel.id, [])]
+        else:
+            try:
+                rids = [int(rid)]
+            except ValueError:
+                return await ctx.send("Invalid ranking id")
+        
+        user = await self.bot.fetch_user(uid)
+        for rid in rids:
+            url = f"{URL}{path}/{rid}/entries/user/{uid}/score/"
+            data = {
+                "number": number,
+                "username": user.name,
+                "message_id": 0 # not from a message
+            }
+            async with self.bot.session.put(url, json = data) as resp:
+                if resp.status != 200:
+                    self.bot.logger.error(f"failed to set ranking, reason: {await resp.text()}")
+                    return await ctx.send("Failed to set ranking")
+            
+            self.bot.logger.info(f"set {uid} to {number} in {rid}")
+        
+        return await ctx.send("Set ranking(s)")
+
     @staticmethod
     def to_float(s: str) -> float:
         try:

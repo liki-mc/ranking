@@ -224,6 +224,60 @@ def delete_user_entries(request: HttpRequest, rid: int, user: int) -> JsonRespon
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
 
+def set_user_score(request: HttpRequest, rid: int, user: int) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            ranking = Ranking.objects.get(rid = rid)
+            if not User.objects.filter(uid = user).exists():
+                if not body.get('username'):
+                    return error('User not found', 404)
+                
+                user = User.objects.create(
+                    uid = user,
+                    name = body['username']
+                )
+                s = 0
+
+            else:
+                user = User.objects.get(uid = user)
+                user_entries = Entry.objects.filter(ranking = ranking, user = user)
+                s = sum([entry.number for entry in user_entries])
+
+            number = body['number']
+            if s == number:
+                return JsonResponse({}, safe = False)
+            
+            entry = Entry.objects.create(
+                ranking = ranking,
+                number = number - s,
+                user = user,
+                message_id = body['message_id']
+            )
+            data = serialize_entry(entry)
+            return JsonResponse(data, safe = False)
+        
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        
+        except Ranking.DoesNotExist:
+            return error('Ranking not found', 404)
+        
+        except User.DoesNotExist:
+            return error('User not found', 404)
+        
+        except IntegrityError as e:
+            print(e)
+            return error("Internal server error", 500)
+        
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+        
+        except KeyError as e:
+            return error(f"Missing field {e}", 400)
+    else:
+        return error("Content-Type must be application/json", 400)
+
 def get_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
     try:
         entry = serialize_entry(Entry.objects.get(ranking__rid = rid, id = eid))
@@ -532,6 +586,9 @@ entry_urls = [
         get = get_entries_by_user,
         delete = delete_user_entries,
     ), name = 'Entries by User'),
+    path('user/<int:user>/score/', response_wrapper(
+        put = set_user_score,
+    ), name = 'Set User Score'),
     path('<int:eid>/', response_wrapper(
         get = get_entry,
         put = update_entry,
