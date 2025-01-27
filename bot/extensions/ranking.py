@@ -293,6 +293,64 @@ class RankingCog(commands.Cog):
         except Exception as e:
             self.bot.logger.error(f"{e.__class__.__name__, e}")
 
+    @commands.Cog.listener("on_message_edit")
+    async def raking_edit_listener(self, before: Message, after: Message):
+        """
+        https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
+        """
+        if before.author.bot:
+            return
+        
+        rankings = self.channels.get(before.channel.id, [])
+        if not rankings:
+            return
+        
+        async with self._lock:
+            self._active_operations += 1
+        try:
+            url = f"{URL}{path}/message/{before.id}/"
+            async with self.bot.session.get(url) as resp:
+                if resp.status != 200:
+                    return self.bot.logger.error(f"failed to get entry on message edit, reason: {await resp.text()}")
+                
+                entries = await resp.json()
+            
+            for entry in entries:
+                ranking = entry["ranking"]
+                if (ranking["token"], ranking["rid"]) in rankings:
+                    token = ranking["token"]
+                    s = 0.0
+                    regex_string = f"(?:{re.escape(token)}) ?(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-]\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
+                    for match in re.finditer(regex_string, after.content):
+                        s += self.to_float(match.group(1))
+                    
+                    if s != entry["number"]:
+                        url = f"{URL}{path}/{ranking['rid']}/entries/{entry['id']}/"
+                        data = {
+                            "number": s
+                        }
+                        async with self.bot.session.put(url, json = data) as resp:
+                            if resp.status != 200:
+                                self.bot.logger.error(f"failed to update entry on message edit, reason: {await resp.text()}")
+                                return
+
+                        self.bot.logger.info(f"updated entry {entry['id']} to {s}")
+                        
+        finally:
+            async with self._lock:
+                self._active_operations -= 1
+        
+        asyncio.create_task(self.update_reactions(after))
+    
+    async def update_reactions(self, msg: Message):
+        await msg.add_reaction("🔁")
+        await asyncio.sleep(20)
+        await msg.remove_reaction("🔁", self.bot.user)
+
+        
+
+
+
 async def setup(bot: Bot):
     cog = RankingCog(bot)
     bot.logger.info("Loaded example cog")
