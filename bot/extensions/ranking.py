@@ -237,6 +237,37 @@ class RankingCog(commands.Cog):
                     s += f"1. {entry['user']}: {entry['score']}\n"
                 return await ctx.send(s)
 
+    @commands.command()
+    @lock
+    async def reset(self, ctx: commands.Context, rid: str = None):
+        if rid is not None:
+            try:
+                rids = [int(rid)]
+            except ValueError:
+                return await ctx.send("Invalid ranking id")
+            
+        else:
+            rids = [r for _, r in self.channels.get(ctx.channel.id, [])]
+
+        failed = []
+        async def reset_ranking_for_user(rid, uid):
+            url = f"{URL}{path}/{rid}/entries/user/{uid}/"
+            async with self.bot.session.delete(url) as resp:
+                self.bot.logger.info(f"resetting {uid} in {rid}")
+                if resp.status != 204:
+                    self.bot.logger.error(f"failed to reset ranking, reason: {await resp.text()}")
+                    failed.append(rid)
+                
+                self.bot.logger.info(f"reset {uid} in {rid}")
+
+        tasks = [reset_ranking_for_user(r, ctx.author.id) for r in rids]
+        await asyncio.gather(*tasks)
+        if failed:
+            self.bot.logger.error(f"failed to reset ranking(s) {failed}")
+            return await ctx.send("Possibly failed to reset ranking(s)")
+        
+        return await ctx.send("Reset ranking(s)")
+
     @staticmethod
     def to_float(s: str) -> float:
         try:
