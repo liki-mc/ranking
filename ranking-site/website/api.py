@@ -65,6 +65,7 @@ serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda ran
 
 serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
 serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
+serialize_random_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
 
 def get_rankings(request: HttpRequest) -> JsonResponse:
     data = serialize_rankings(Ranking.objects.all())
@@ -504,6 +505,14 @@ def delete_user(request: HttpRequest, uid: int) -> JsonResponse:
     except User.DoesNotExist:
         return error('User not found', 404)
 
+def get_entry_by_message(request: HttpRequest, message_id: int) -> JsonResponse:
+    entries = serialize_random_entries(Entry.objects.filter(message_id = message_id))
+    
+    if not entries:
+        return error('Entry not found', 404)
+    
+    return JsonResponse(entries, safe = False)
+
 entry_urls = [
     path('', response_wrapper(
         get = get_entries,
@@ -512,7 +521,7 @@ entry_urls = [
     path('user/<int:user>/', response_wrapper(
         get = get_entries_by_user,
     ), name = 'Entries by User'),
-    path('eid/<int:eid>/', response_wrapper(
+    path('<int:eid>/', response_wrapper(
         get = get_entry,
         put = update_entry,
         delete = delete_entry,
@@ -571,4 +580,7 @@ urlpatterns = [
     ), name = 'Name Scores'),
     path('caffeine/', include(caffeine_urls)),
     path('users/', include(user_urls)),
+    path('message/<int:message_id>/', response_wrapper(
+        get = get_entry_by_message,
+    ), name = 'Entry by Message ID'),
 ]
