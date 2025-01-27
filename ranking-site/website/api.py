@@ -332,6 +332,11 @@ def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
     data: dict[User, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
         data[entry.user.uid] = data.get(entry.user.uid, 0) + entry.number
+    
+    data = [{
+        'user': user,
+        'score': score
+    } for user, score in data.items()]
 
     return JsonResponse(data, safe = False)
 
@@ -342,11 +347,14 @@ def get_name_scores(request: HttpRequest, rid: int) -> JsonResponse:
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
     
-    data: dict[str, float] = {}
+    data: dict[User, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
         data[entry.user] = data.get(entry.user, 0) + entry.number
     
-    data = {user.name : score for user, score in data.items()}
+    data = [{
+        'user': user.name,
+        'score': score
+    } for user, score in data.items()]
 
     return JsonResponse(data, safe = False)
 
