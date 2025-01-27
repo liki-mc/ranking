@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 
 from discord import Interaction, Message
@@ -181,7 +182,61 @@ class RankingCog(commands.Cog):
             self.channels.setdefault(ctx.channel.id, []).append((ranking["token"], new_rid))
             return await ctx.send(f"Restarted ranking #{rid} as #{new_rid}")
         
-    
+    @commands.command()
+    @lock
+    async def show(self, ctx: commands.Context, rid: str = None):
+        if rid is not None:
+            try:
+                rids = [int(rid)]
+            except ValueError:
+                return await ctx.send("Invalid ranking id")
+            
+            url = f"{URL}{path}/{rids[0]}/"
+            async with self.bot.session.get(url) as resp:
+                if resp.status != 200:
+                    self.bot.logger.error(f"failed to show ranking, reason: {await resp.text()}")
+                    return await ctx.send("Failed to show ranking")
+                
+                ranking = await resp.json()
+                if ranking["channel"] != ctx.channel.id:
+                    return await ctx.send("No ranking with that id in this channel")
+            
+            rankings = [ranking]
+        
+        else:
+            rankings = []
+            failed = []
+            async def get_ranking(rid):
+                url = f"{URL}{path}/{rid}/"
+                async with self.bot.session.get(url) as resp:
+                    if resp.status != 200:
+                        self.bot.logger.error(f"failed to show ranking, reason: {await resp.text()}")
+                        failed.append(True)
+                        return
+                    
+                    rankings.append(await resp.json())
+            
+            tasks = [get_ranking(r) for _, r in self.channels.get(ctx.channel.id, [])]
+            await asyncio.gather(*tasks)
+            if failed:
+                return await ctx.send("Failed to show ranking(s)")
+
+        
+        if len(rankings) == 1:
+            ranking = rankings[0]
+            url = f"{URL}{path}/{ranking['rid']}/name_scores/"
+            async with self.bot.session.get(url) as resp:
+                if resp.status != 200:
+                    self.bot.logger.error(f"failed to show ranking, reason: {await resp.text()}")
+                    return await ctx.send("Failed to show ranking")
+                
+                data: list = await resp.json()
+                data.sort(key = lambda x: x["score"], reverse = True)
+                s = f"## {ranking['name']} (#{ranking['rid']})\n"
+                for entry in data:
+                    s += f"1. {entry['user']}: {entry['score']}\n"
+                return await ctx.send(s)
+
     @staticmethod
     def to_float(s: str) -> float:
         try:
@@ -192,7 +247,8 @@ class RankingCog(commands.Cog):
             return 0.0
 
     @commands.Cog.listener("on_message")
-    async def example_listener(self, msg: Message):
+    @lock
+    async def ranking_listener(self, msg: Message):
         """
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
@@ -214,13 +270,15 @@ class RankingCog(commands.Cog):
                 
                 if s:
                     # add to database
-                    url = f"{URL}{path}{rid}/entries/"
+                    url = f"{URL}{path}/{rid}/entries/"
                     data = {
                         "user": msg.author.id,
                         "number": s,
-                        "message_id": msg.id
+                        "message_id": msg.id,
+                        "username": msg.author.name
                     }
                     self.bot.logger.info(f"posting {data} to {url}")
+                    
                     async with self.bot.session.post(url, json = data) as resp:
                         if resp.status != 201:
                             self.bot.logger.error(f"failed to post to {url}, reason: {await resp.text()}")
