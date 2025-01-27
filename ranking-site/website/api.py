@@ -16,7 +16,7 @@ Including another URLconf
 """
 import json
 from django.urls import include, path
-from django.http import JsonResponse, HttpRequest
+from django.http import JsonResponse, HttpRequest, HttpResponse
 from .models import Ranking, Entry, Caffeine_content as CaffeineContent, User
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
@@ -176,7 +176,7 @@ def delete_ranking(request: HttpRequest, rid: int) -> JsonResponse:
     try:
         ranking = Ranking.objects.get(rid = rid)
         ranking.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
@@ -210,9 +210,19 @@ def get_entries_by_user(request: HttpRequest, rid: int, user: int) -> JsonRespon
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
     
-    data = serialize_entries(Entry.objects.filter(ranking = ranking, user = user))
+    data = serialize_entries(Entry.objects.filter(ranking = ranking, user__uid = user))
 
     return JsonResponse(data, safe = False)
+
+def delete_user_entries(request: HttpRequest, rid: int, user: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+        entries = Entry.objects.filter(ranking = ranking, user__uid = user)
+        entries.delete()
+        return HttpResponse(status = 204)
+    
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
 
 def get_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
     try:
@@ -319,7 +329,7 @@ def delete_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
             return error('Ranking is not active', 403)
         
         entry.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     except Entry.DoesNotExist:
         return error('Entry not found', 404)
 
@@ -427,7 +437,7 @@ def delete_caffeine(request: HttpRequest, name: str) -> JsonResponse:
     try:
         caffeine = CaffeineContent.objects.get(name = name)
         caffeine.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     
     except CaffeineContent.DoesNotExist:
         return error('Caffeine content not found', 404)
@@ -500,7 +510,7 @@ def delete_user(request: HttpRequest, uid: int) -> JsonResponse:
     try:
         user = User.objects.get(uid = uid)
         user.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     
     except User.DoesNotExist:
         return error('User not found', 404)
@@ -520,6 +530,7 @@ entry_urls = [
     ), name = 'Entries'),
     path('user/<int:user>/', response_wrapper(
         get = get_entries_by_user,
+        delete = delete_user_entries,
     ), name = 'Entries by User'),
     path('<int:eid>/', response_wrapper(
         get = get_entry,
