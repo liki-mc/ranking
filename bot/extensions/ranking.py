@@ -16,11 +16,15 @@ class RankingCog(commands.Cog):
         self.bot = bot
 
         self.channels : dict[int, list[tuple[str | None, int]]] = {}
+        self.caffeines : dict[str, float] = {}
 
         # Safe update of channels
         self._lock = asyncio.Lock()
         self._active_operations = 0
         self.update_channels.start()
+
+        self._caffeine_lock = asyncio.Lock()
+        self.update_caffeines.start()
     
     async def load_channels(self):
         self.channels.clear()
@@ -44,6 +48,24 @@ class RankingCog(commands.Cog):
                 await asyncio.sleep(1)
 
             await self.load_channels()
+    
+    async def load_caffeines(self):
+        self.caffeines.clear()
+        url = f"{URL}/api/v1/ranking/caffeine/"
+        async with self.bot.session.get(url) as resp:
+            if resp.status != 200:
+                return self.bot.logger.info(await resp.text())
+            
+            data = await resp.json()
+            for caffeine in data:
+                self.caffeines[caffeine["name"]] = caffeine["caffeine"]
+        
+        self.bot.logger.info(self.caffeines)
+    
+    @tasks.loop(minutes = 10)
+    async def update_caffeines(self):
+        async with self._caffeine_lock:
+            await self.load_caffeines()
     
     @staticmethod
     def lock(func):
@@ -292,6 +314,9 @@ class RankingCog(commands.Cog):
                 rids = [int(rid)]
             except ValueError:
                 return await ctx.send("Invalid ranking id")
+            
+            if rids[0] not in [r for _, r in self.channels.get(ctx.channel.id, [])]:
+                return await ctx.send("No ranking with that id in this channel")
         
         user = await self.bot.fetch_user(uid)
         for rid in rids:
@@ -309,6 +334,113 @@ class RankingCog(commands.Cog):
             self.bot.logger.info(f"set {uid} to {number} in {rid}")
         
         return await ctx.send("Set ranking(s)")
+
+    @commands.command()
+    async def caffeine(self, ctx: commands.Context, action: str, *args: str):
+        match action:
+            case "add":
+                if len(args) != 2:
+                    return await ctx.send("Please provide a name and caffeine content")
+                
+                name, caffeine = args
+                if name in self.caffeines:
+                    return await ctx.send("Caffeine content already exists, user `caffeine update` to update")
+                
+                try:
+                    caffeine = float(caffeine)
+                except ValueError:
+                    return await ctx.send("Invalid caffeine content")
+                
+                url = f"{URL}/api/v1/ranking/caffeine/"
+                data = {
+                    "name": name,
+                    "caffeine": caffeine
+                }
+                async with self.bot.session.post(url, json = data) as resp:
+                    if resp.status != 201:
+                        self.bot.logger.error(f"failed to add caffeine content, reason: {await resp.text()}")
+                        return await ctx.send("Failed to add caffeine content")
+                
+                self.caffeines[name] = caffeine
+                return await ctx.send("Added caffeine content")
+
+            case "update":
+                if len(args) != 2:
+                    return await ctx.send("Please provide a name and caffeine content")
+                
+                name, caffeine = args
+                if name not in self.caffeines:
+                    return await ctx.send("Caffeine content does not exist, use `caffeine add` to add")
+                
+                try:
+                    caffeine = float(caffeine)
+                except ValueError:
+                    return await ctx.send("Invalid caffeine content")
+                
+                url = f"{URL}/api/v1/ranking/caffeine/{name}/"
+                data = {
+                    "caffeine": caffeine
+                }
+                async with self.bot.session.put(url, json = data) as resp:
+                    if resp.status != 200:
+                        self.bot.logger.error(f"failed to update caffeine content, reason: {await resp.text()}")
+                        return await ctx.send("Failed to update caffeine content")
+                
+                self.caffeines[name] = caffeine
+                return await ctx.send("Updated caffeine content")
+            
+            case "remove":
+                if len(args) != 1:
+                    return await ctx.send("Please provide a name")
+                
+                name = args[0]
+                if name not in self.caffeines:
+                    return await ctx.send("Caffeine content does not exist")
+                
+                url = f"{URL}/api/v1/ranking/caffeine/{name}/"
+                async with self.bot.session.delete(url) as resp:
+                    if resp.status != 204:
+                        self.bot.logger.error(f"failed to remove caffeine content, reason: {await resp.text()}")
+                        return await ctx.send("Failed to remove caffeine content")
+                    
+                self.caffeines.pop(name)
+                return await ctx.send("Removed caffeine content")
+            
+            case "list":
+                s = "## Caffeine content:\n"
+                caffeines = [(name, caffeine) for name, caffeine in self.caffeines.items()]
+                caffeines.sort(key = lambda x: x[1], reverse = True)
+                for name, caffeine in caffeines:
+                    s += f"- {name}: {caffeine}\n"
+                return await ctx.send(s)
+            
+            case _:
+                return await ctx.send("Invalid action")
+
+    @commands.command()
+    async def name(self, ctx: commands.Context, name: str = None):
+        if name is None:
+            name = ctx.author.display_name
+            
+        url = f"{URL}{path}/users/"
+        data = {
+            "name": name,
+            "uid": ctx.author.id
+        }
+        async with self.bot.session.put(f"{url}{ctx.author.id}/", json = data) as resp:
+            if resp.status == 201:
+                if resp.status == 404:
+                    async with self.bot.session.post(url, json = data) as resp:
+                        if resp.status != 201:
+                            self.bot.logger.error(f"failed to create user name, reason: {await resp.text()}")
+                            return await ctx.send("Failed to create user name")
+                        
+                        return await ctx.send("Set user name")
+
+                self.bot.logger.error(f"failed to update user name, reason: {await resp.text()}")
+                return await ctx.send("Failed to update user name")
+            
+            return await ctx.send("Updated user name")
 
     @staticmethod
     def to_float(s: str) -> float:
@@ -419,9 +551,6 @@ class RankingCog(commands.Cog):
         await msg.add_reaction("🔁")
         await asyncio.sleep(20)
         await msg.remove_reaction("🔁", self.bot.user)
-
-        
-
 
 
 async def setup(bot: Bot):

@@ -67,6 +67,8 @@ serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": s
 serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
 serialize_random_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
 
+serialize_caffeine: Callable[[CaffeineContent], dict[str, Any]] = lambda caffeine: {"name": caffeine.name, "caffeine": caffeine.caffeine}
+
 def get_rankings(request: HttpRequest) -> JsonResponse:
     data = serialize_rankings(Ranking.objects.all())
 
@@ -424,13 +426,13 @@ def get_name_scores(request: HttpRequest, rid: int) -> JsonResponse:
     return JsonResponse(data, safe = False)
 
 def get_caffeines(request: HttpRequest) -> JsonResponse:
-    data = {c.name: c.caffeine for c in CaffeineContent.objects.all()}
+    data = [serialize_caffeine(caffeine) for caffeine in CaffeineContent.objects.all()]
     return JsonResponse(data, safe = False)
 
 def get_caffeine(request: HttpRequest, name: str) -> JsonResponse:
     try:
         caffeine = CaffeineContent.objects.get(name = name)
-        data = {caffeine.name: caffeine.caffeine}
+        data = serialize_caffeine(caffeine)
         return JsonResponse(data, safe = False)
     
     except CaffeineContent.DoesNotExist:
@@ -444,7 +446,7 @@ def create_caffeine(request: HttpRequest) -> JsonResponse:
                 name = body['name'],
                 caffeine = body['caffeine']
             )
-            data = {caffeine.name: caffeine.caffeine}
+            data = serialize_caffeine(caffeine)
             return JsonResponse(data, safe = False, status = 201)
         
         except json.JSONDecodeError:
@@ -469,7 +471,7 @@ def update_caffeine(request: HttpRequest, name: str) -> JsonResponse:
             caffeine = CaffeineContent.objects.get(name = name)
             caffeine.caffeine = body.get('caffeine', caffeine.caffeine)
             caffeine.save()
-            data = {caffeine.name: caffeine.caffeine}
+            data = serialize_caffeine(caffeine)
             return JsonResponse(data, safe = False)
         
         except json.JSONDecodeError:
