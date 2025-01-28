@@ -400,12 +400,11 @@ def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
     
     data: dict[User, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
-        data[entry.user.uid] = data.get(entry.user.uid, 0) + entry.number
+        user = data.setdefault(entry.user.uid, {'user': entry.user.uid, 'score': 0, 'last_updated': entry.date})
+        user['score'] += entry.number
+        user['last_updated'] = max(user['last_updated'], entry.date)
     
-    data = [{
-        'user': user,
-        'score': score
-    } for user, score in data.items()]
+    data = list(data.values())
 
     return JsonResponse(data, safe = False)
 
@@ -418,13 +417,11 @@ def get_name_scores(request: HttpRequest, rid: int) -> JsonResponse:
     
     data: dict[User, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
-        data[entry.user] = data.get(entry.user, 0) + entry.number
+        user = data.setdefault(entry.user.uid, {'user': entry.user.name, 'uid': entry.user.uid, 'score': 0, 'last_updated': entry.date})
+        user['score'] += entry.number
+        user['last_updated'] = max(user['last_updated'], entry.date)
     
-    data = [{
-        'user': user.name,
-        'uid': user.uid,
-        'score': score
-    } for user, score in data.items()]
+    data = list(data.values())
 
     return JsonResponse(data, safe = False)
 
