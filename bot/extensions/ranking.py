@@ -87,6 +87,9 @@ class RankingCog(commands.Cog):
     @commands.command()
     @lock
     async def create(self, ctx: commands.Context, name: str, token: str = None):
+        if ctx.channel.id != 0:
+            return await ctx.send("This command is disabled in this channel")
+        
         url = f"{URL}{path}/"
         data = {
             "name": name,
@@ -116,9 +119,9 @@ class RankingCog(commands.Cog):
             inactive_list = []
             for ranking in data:
                 if ranking["active"]:
-                    active_list.append(f'{ranking["name"]} (#{ranking["rid"]})')
+                    active_list.append(f'{ranking["name"]} (#{ranking["rid"]})' + (f' ({ranking["token"]})' if ranking["token"] else ""))
                 else:
-                    inactive_list.append(f'{ranking["name"]} (#{ranking["rid"]})')
+                    inactive_list.append(f'{ranking["name"]} (#{ranking["rid"]})' + (f' ({ranking["token"]})' if ranking["token"] else ""))
             
             s = ""
             if active_list:
@@ -161,6 +164,7 @@ class RankingCog(commands.Cog):
     @commands.command()
     @lock
     async def restart(self, ctx: commands.Context, rid: str):
+        return await ctx.send("This command is disabled")
         try:
             rid = int(rid)
         except ValueError:
@@ -226,6 +230,9 @@ class RankingCog(commands.Cog):
             rankings = [ranking]
         
         else:
+            if not self.channels.get(ctx.channel.id):
+                return await ctx.send("No ranking in this channel")
+            
             rankings = []
             failed = []
             async def get_ranking(rid):
@@ -258,6 +265,34 @@ class RankingCog(commands.Cog):
                 for entry in data:
                     s += f"1. {entry['user']}: {entry['score']}\n"
                 return await ctx.send(s)
+
+        names = set(ranking["name"] for ranking in rankings)
+        message = ""
+        for name in names:
+            users = {}
+            for ranking in [ranking for ranking in rankings if ranking["name"] == name]:
+                url = f"{URL}{path}/{ranking['rid']}/name_scores/"
+                async with self.bot.session.get(url) as resp:
+                    if resp.status != 200:
+                        self.bot.logger.error(f"failed to show ranking, reason: {await resp.text()}")
+                        return await ctx.send("Failed to show ranking")
+                    
+                    data: list = await resp.json()
+                    data.sort(key = lambda x: x["score"], reverse = True)
+                    for entry in data:
+                        user = users.setdefault(entry["uid"], {"score": 0, "string": "", "username": entry["user"]})
+                        user["score"] += entry["score"]
+                        user["string"] += f'{ranking["token"]}{entry["score"]} '
+                    
+            users = list(users.values())
+            users.sort(key = lambda x: x["score"], reverse = True)
+            s = f"## {name}\n"
+            for i, user in enumerate(users):
+                s += f"{i + 1}. {user['username']}: {user['string']}= {user['score']}\n"
+            
+            message += s + "\n"
+        
+        await ctx.send(message)
 
     @commands.command()
     @lock
@@ -421,7 +456,7 @@ class RankingCog(commands.Cog):
     async def name(self, ctx: commands.Context, name: str = None):
         if name is None:
             name = ctx.author.display_name
-            
+
         url = f"{URL}{path}/users/"
         data = {
             "name": name,

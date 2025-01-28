@@ -420,6 +420,7 @@ def get_name_scores(request: HttpRequest, rid: int) -> JsonResponse:
     
     data = [{
         'user': user.name,
+        'uid': user.uid,
         'score': score
     } for user, score in data.items()]
 
