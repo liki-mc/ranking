@@ -505,9 +505,9 @@ class RankingCog(commands.Cog):
         try:
             for token, rid in tokens:
                 s = 0.0
-                regex_string = f"(?:{re.escape(token)}) ?(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-]\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
+                regex_string = f"(?:{re.escape(token)}) ?(\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-]\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
                 for match in re.finditer(regex_string, msg.content):
-                    s += self.to_float(match.group(1))
+                    s += self.to_float(match.group(1).replace(",", "."))
                 
                 if s:
                     # add to database
@@ -561,9 +561,9 @@ class RankingCog(commands.Cog):
                 if (ranking["token"], ranking["rid"]) in rankings:
                     token = ranking["token"]
                     s = 0.0
-                    regex_string = f"(?:{re.escape(token)}) ?(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-]\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
+                    regex_string = f"(?:{re.escape(token)}) ?(\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-]\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
                     for match in re.finditer(regex_string, after.content):
-                        s += self.to_float(match.group(1))
+                        s += self.to_float(match.group(1).replace(",", "."))
                     
                     if s != entry["number"]:
                         url = f"{URL}{path}/{ranking['rid']}/entries/{entry['id']}/"
