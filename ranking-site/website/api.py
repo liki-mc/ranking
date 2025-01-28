@@ -60,8 +60,8 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active}
-serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active} for ranking in rankings]
+serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active, "reverse_sorting": ranking.reverse_sorting}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active, "reverse_sorting": ranking.reverse_sorting} for ranking in rankings]
 
 serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
 serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
@@ -117,7 +117,8 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
             ranking = Ranking.objects.create(
                 name = body['name'],
                 token = body['token'],
-                channel = body['channel']
+                channel = body['channel'],
+                reverse_sorting = body.get('reverse_sorting', False)
             )
             data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False, status = 201)
@@ -154,6 +155,7 @@ def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
                 if possible_ranking.first().rid != ranking.rid:
                     return error('Ranking already exists and is active', 409)
                 
+            ranking.reverse_sorting = body.get('reverse_sorting', ranking.reverse_sorting)
             ranking.active = body.get('active', ranking.active)
             ranking.save()
             data = serialize_ranking(ranking)

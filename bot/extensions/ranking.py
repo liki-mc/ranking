@@ -260,7 +260,7 @@ class RankingCog(commands.Cog):
                     return await ctx.send("Failed to show ranking")
                 
                 data: list = await resp.json()
-                data.sort(key = lambda x: x["score"], reverse = True)
+                data.sort(key = lambda x: x["score"], reverse = not ranking["reverse_sorting"])
                 s = f"## {ranking['name']} (#{ranking['rid']})\n"
                 for entry in data:
                     s += f"1. {entry['user']}: {entry['score']}\n"
