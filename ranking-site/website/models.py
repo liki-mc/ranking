@@ -8,6 +8,7 @@ class Ranking(models.Model):
     channel = models.IntegerField()
     date = models.DateTimeField("date published", auto_now_add = True)
     active = models.BooleanField(default = True)
+    reverse_sorting = models.BooleanField(default = False)
     
     def __str__(self):
         return self.name

@@ -16,7 +16,7 @@ Including another URLconf
 """
 import json
 from django.urls import include, path
-from django.http import JsonResponse, HttpRequest
+from django.http import JsonResponse, HttpRequest, HttpResponse
 from .models import Ranking, Entry, Caffeine_content as CaffeineContent, User
 from django.db.utils import IntegrityError
 from django.core.exceptions import ValidationError
@@ -60,11 +60,14 @@ def response_wrapper(
                 return error('Method not allowed', 405)
     return wrapper
 
-serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date}
-serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date} for ranking in rankings]
+serialize_ranking: Callable[[Ranking], dict[str, Any]] = lambda ranking : {"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active, "reverse_sorting": ranking.reverse_sorting}
+serialize_rankings: Callable[[list[Ranking]], list[dict[str, Any]]] = lambda rankings : [{"name": ranking.name, "rid": ranking.rid, "token": ranking.token, "channel": ranking.channel, "date": ranking.date, "active": ranking.active, "reverse_sorting": ranking.reverse_sorting} for ranking in rankings]
 
 serialize_entry: Callable[[Entry], dict[str, Any]] = lambda entry: {"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id}
 serialize_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
+serialize_random_entries: Callable[[list[Entry]], list[dict[str, Any]]] = lambda entries: [{"ranking": serialize_ranking(entry.ranking), "number": entry.number, "user": entry.user.uid, "date": entry.date, "id": entry.id, "message_id": entry.message_id} for entry in entries]
+
+serialize_caffeine: Callable[[CaffeineContent], dict[str, Any]] = lambda caffeine: {"name": caffeine.name, "caffeine": caffeine.caffeine}
 
 def get_rankings(request: HttpRequest) -> JsonResponse:
     data = serialize_rankings(Ranking.objects.all())
@@ -114,7 +117,8 @@ def create_ranking(request: HttpRequest) -> JsonResponse:
             ranking = Ranking.objects.create(
                 name = body['name'],
                 token = body['token'],
-                channel = body['channel']
+                channel = body['channel'],
+                reverse_sorting = body.get('reverse_sorting', False)
             )
             data = serialize_ranking(ranking)
             return JsonResponse(data, safe = False, status = 201)
@@ -151,6 +155,7 @@ def update_ranking(request: HttpRequest, rid: int) -> JsonResponse:
                 if possible_ranking.first().rid != ranking.rid:
                     return error('Ranking already exists and is active', 409)
                 
+            ranking.reverse_sorting = body.get('reverse_sorting', ranking.reverse_sorting)
             ranking.active = body.get('active', ranking.active)
             ranking.save()
             data = serialize_ranking(ranking)
@@ -175,7 +180,7 @@ def delete_ranking(request: HttpRequest, rid: int) -> JsonResponse:
     try:
         ranking = Ranking.objects.get(rid = rid)
         ranking.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
@@ -185,7 +190,8 @@ def deactivate_ranking(request: HttpRequest, rid: int) -> JsonResponse:
         ranking = Ranking.objects.get(rid = rid)
         ranking.active = False
         ranking.save()
-        return JsonResponse({}, status = 204)
+        data = serialize_ranking(ranking)
+        return JsonResponse(data, status = 200)
     
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
@@ -208,9 +214,73 @@ def get_entries_by_user(request: HttpRequest, rid: int, user: int) -> JsonRespon
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
     
-    data = serialize_entries(Entry.objects.filter(ranking = ranking, user = user))
+    data = serialize_entries(Entry.objects.filter(ranking = ranking, user__uid = user))
 
     return JsonResponse(data, safe = False)
+
+def delete_user_entries(request: HttpRequest, rid: int, user: int) -> JsonResponse:
+    try:
+        ranking = Ranking.objects.get(rid = rid)
+        entries = Entry.objects.filter(ranking = ranking, user__uid = user)
+        entries.delete()
+        return HttpResponse(status = 204)
+    
+    except Ranking.DoesNotExist:
+        return error('Ranking not found', 404)
+
+def set_user_score(request: HttpRequest, rid: int, user: int) -> JsonResponse:
+    if request.content_type == 'application/json':
+        try:
+            body = json.loads(request.body)
+            ranking = Ranking.objects.get(rid = rid)
+            if not User.objects.filter(uid = user).exists():
+                if not body.get('username'):
+                    return error('User not found', 404)
+                
+                user = User.objects.create(
+                    uid = user,
+                    name = body['username']
+                )
+                s = 0
+
+            else:
+                user = User.objects.get(uid = user)
+                user_entries = Entry.objects.filter(ranking = ranking, user = user)
+                s = sum([entry.number for entry in user_entries])
+
+            number = body['number']
+            if s == number:
+                return JsonResponse({}, safe = False)
+            
+            entry = Entry.objects.create(
+                ranking = ranking,
+                number = number - s,
+                user = user,
+                message_id = body['message_id']
+            )
+            data = serialize_entry(entry)
+            return JsonResponse(data, safe = False)
+        
+        except json.JSONDecodeError:
+            return error('Invalid JSON', 400)
+        
+        except Ranking.DoesNotExist:
+            return error('Ranking not found', 404)
+        
+        except User.DoesNotExist:
+            return error('User not found', 404)
+        
+        except IntegrityError as e:
+            print(e)
+            return error("Internal server error", 500)
+        
+        except ValidationError as e:
+            return error(e.message_dict, 400)
+        
+        except KeyError as e:
+            return error(f"Missing field {e}", 400)
+    else:
+        return error("Content-Type must be application/json", 400)
 
 def get_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
     try:
@@ -317,7 +387,7 @@ def delete_entry(request: HttpRequest, rid: int, eid: int) -> JsonResponse:
             return error('Ranking is not active', 403)
         
         entry.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     except Entry.DoesNotExist:
         return error('Entry not found', 404)
 
@@ -330,7 +400,11 @@ def get_scores(request: HttpRequest, rid: int) -> JsonResponse:
     
     data: dict[User, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
-        data[entry.user.uid] = data.get(entry.user.uid, 0) + entry.number
+        user = data.setdefault(entry.user.uid, {'user': entry.user.uid, 'score': 0, 'last_updated': entry.date})
+        user['score'] += entry.number
+        user['last_updated'] = max(user['last_updated'], entry.date)
+    
+    data = list(data.values())
 
     return JsonResponse(data, safe = False)
 
@@ -341,22 +415,24 @@ def get_name_scores(request: HttpRequest, rid: int) -> JsonResponse:
     except Ranking.DoesNotExist:
         return error('Ranking not found', 404)
     
-    data: dict[str, float] = {}
+    data: dict[User, float] = {}
     for entry in Entry.objects.filter(ranking = ranking):
-        data[entry.user] = data.get(entry.user, 0) + entry.number
+        user = data.setdefault(entry.user.uid, {'user': entry.user.name, 'uid': entry.user.uid, 'score': 0, 'last_updated': entry.date})
+        user['score'] += entry.number
+        user['last_updated'] = max(user['last_updated'], entry.date)
     
-    data = {user.name : score for user, score in data.items()}
+    data = list(data.values())
 
     return JsonResponse(data, safe = False)
 
 def get_caffeines(request: HttpRequest) -> JsonResponse:
-    data = {c.name: c.caffeine for c in CaffeineContent.objects.all()}
+    data = [serialize_caffeine(caffeine) for caffeine in CaffeineContent.objects.all()]
     return JsonResponse(data, safe = False)
 
 def get_caffeine(request: HttpRequest, name: str) -> JsonResponse:
     try:
         caffeine = CaffeineContent.objects.get(name = name)
-        data = {caffeine.name: caffeine.caffeine}
+        data = serialize_caffeine(caffeine)
         return JsonResponse(data, safe = False)
     
     except CaffeineContent.DoesNotExist:
@@ -370,7 +446,7 @@ def create_caffeine(request: HttpRequest) -> JsonResponse:
                 name = body['name'],
                 caffeine = body['caffeine']
             )
-            data = {caffeine.name: caffeine.caffeine}
+            data = serialize_caffeine(caffeine)
             return JsonResponse(data, safe = False, status = 201)
         
         except json.JSONDecodeError:
@@ -395,7 +471,7 @@ def update_caffeine(request: HttpRequest, name: str) -> JsonResponse:
             caffeine = CaffeineContent.objects.get(name = name)
             caffeine.caffeine = body.get('caffeine', caffeine.caffeine)
             caffeine.save()
-            data = {caffeine.name: caffeine.caffeine}
+            data = serialize_caffeine(caffeine)
             return JsonResponse(data, safe = False)
         
         except json.JSONDecodeError:
@@ -417,7 +493,7 @@ def delete_caffeine(request: HttpRequest, name: str) -> JsonResponse:
     try:
         caffeine = CaffeineContent.objects.get(name = name)
         caffeine.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     
     except CaffeineContent.DoesNotExist:
         return error('Caffeine content not found', 404)
@@ -490,10 +566,18 @@ def delete_user(request: HttpRequest, uid: int) -> JsonResponse:
     try:
         user = User.objects.get(uid = uid)
         user.delete()
-        return JsonResponse({}, status = 204)
+        return HttpResponse(status = 204)
     
     except User.DoesNotExist:
         return error('User not found', 404)
+
+def get_entry_by_message(request: HttpRequest, message_id: int) -> JsonResponse:
+    entries = serialize_random_entries(Entry.objects.filter(message_id = message_id))
+    
+    if not entries:
+        return error('Entry not found', 404)
+    
+    return JsonResponse(entries, safe = False)
 
 entry_urls = [
     path('', response_wrapper(
@@ -502,8 +586,12 @@ entry_urls = [
     ), name = 'Entries'),
     path('user/<int:user>/', response_wrapper(
         get = get_entries_by_user,
+        delete = delete_user_entries,
     ), name = 'Entries by User'),
-    path('eid/<int:eid>/', response_wrapper(
+    path('user/<int:user>/score/', response_wrapper(
+        put = set_user_score,
+    ), name = 'Set User Score'),
+    path('<int:eid>/', response_wrapper(
         get = get_entry,
         put = update_entry,
         delete = delete_entry,
@@ -562,4 +650,7 @@ urlpatterns = [
     ), name = 'Name Scores'),
     path('caffeine/', include(caffeine_urls)),
     path('users/', include(user_urls)),
+    path('message/<int:message_id>/', response_wrapper(
+        get = get_entry_by_message,
+    ), name = 'Entry by Message ID'),
 ]
