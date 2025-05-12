@@ -1,12 +1,10 @@
 services:
-    example-discord-bot:
+    ranking:
         build:
             context: .
-        container_name: example-discord-bot
+        container_name: ranking
         restart: "no"
-        secrets:
-          - discord_token
-
-secrets:
-    discord_token:
-        file: ./secrets/discord_token.txt
+        environment:
+            - DISCORD_TOKEN=${DISCORD_TOKEN}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            - POSTGRES_HOST=host.docker.internal

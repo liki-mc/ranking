@@ -12,12 +12,12 @@ ENV PIP_NO_CACHE_DIR=false \
 # Get poetry
 RUN pip install -U poetry
 
-WORKDIR /example-discord-bot
+WORKDIR /ranking
 
 # Install deps
 COPY pyproject.toml poetry.lock ./
 RUN poetry install
 
-COPY ./bot ./bot
+COPY ./ranking-site ./ranking-site
 
-CMD [ "python3", "-m", "bot" ]
+CMD [ "python3", "ranking-site/manage.py", "runserver" ]
