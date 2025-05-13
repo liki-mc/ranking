@@ -11,6 +11,7 @@ discord-py = "^2.4.0"
 discord = "^2.3.2"
 django = "^5.1.5"
 psycopg2-binary = "^2.9.10"
+python-dotenv = "^1.1.0"
 
 [build-system]
 requires = ["poetry-core"]

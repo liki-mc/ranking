@@ -19,7 +19,7 @@ class Bot(commands.Bot):
         super().__init__(command_prefix="$", *args, intents=intents, **kwargs)
 
     async def load_extensions(self) -> None:
-        from bot.extensions import EXTENSIONS
+        from .extensions import EXTENSIONS
 
         for ext in EXTENSIONS:
             await self.load_extension(ext)

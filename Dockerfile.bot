@@ -18,6 +18,6 @@ WORKDIR /ranking
 COPY pyproject.toml poetry.lock ./
 RUN poetry install
 
-COPY ./ranking-site ./ranking-site
+COPY ./ranking ./ranking
 
-CMD [ "python3", "ranking-site/manage.py", "runserver" ]
+CMD [ "python3", "-m", "ranking.run_bot" ]

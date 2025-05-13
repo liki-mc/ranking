@@ -1,7 +1,7 @@
 from discord import app_commands, Interaction, Message
 from discord.ext.commands import Cog
 
-from bot.bot import Bot
+from ranking.bot.bot import Bot
 
 
 class Example(Cog):

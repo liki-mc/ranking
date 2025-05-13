@@ -3,10 +3,16 @@ from signal import SIGTERM
 import asyncio
 import logging
 
-import bot
-from bot.bot import Bot
-from bot.constants import DISCORD_TOKEN
+from . import bot
+from .bot.bot import Bot
 
+import dotenv
+dotenv.load_dotenv()
+
+from os import getenv
+DISCORD_TOKEN = getenv("DISCORD_TOKEN", None)
+if DISCORD_TOKEN is None:
+    raise ValueError("DISCORD_TOKEN not set")
 
 async def main():
     bot.instance = Bot()
