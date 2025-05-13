@@ -16,11 +16,12 @@ class Bot(commands.Bot):
 
         self.logger = logger
 
-        super().__init__(command_prefix="$", *args, intents=intents, **kwargs)
+        help_command = commands.MinimalHelpCommand()
+
+        super().__init__(command_prefix="$", *args, intents=intents, help_command = help_command, **kwargs)
 
     async def load_extensions(self) -> None:
-        from .extensions import EXTENSIONS
-
+        from bot.extensions import EXTENSIONS
         for ext in EXTENSIONS:
             await self.load_extension(ext)
             self.logger.info(f"loaded extension '{ext}'")

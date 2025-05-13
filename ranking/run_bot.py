@@ -3,8 +3,8 @@ from signal import SIGTERM
 import asyncio
 import logging
 
-from . import bot
-from .bot.bot import Bot
+import bot
+from bot.bot import Bot
 
 import dotenv
 dotenv.load_dotenv()
@@ -14,7 +14,7 @@ DISCORD_TOKEN = getenv("DISCORD_TOKEN", None)
 if DISCORD_TOKEN is None:
     raise ValueError("DISCORD_TOKEN not set")
 
-async def main():
+async def start():
     bot.instance = Bot()
 
     await bot.instance.load_extensions()
@@ -28,10 +28,10 @@ async def close(task):
     task.exception()
 
 
-if __name__ == "__main__":
+def main():
     loop = asyncio.get_event_loop()
 
-    bot_task = loop.create_task(main())
+    bot_task = loop.create_task(start())
 
     loop.add_signal_handler(SIGTERM, lambda: loop.create_task(close(bot_task)))
 
@@ -45,3 +45,6 @@ if __name__ == "__main__":
     finally:
         loop.close()
         sys.exit(69)
+
+if __name__ == "__main__":
+    main()

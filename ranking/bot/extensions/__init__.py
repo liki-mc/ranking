@@ -3,7 +3,7 @@ import inspect
 import pkgutil
 from typing import Iterator, NoReturn
 
-from ranking.bot import extensions
+from bot import extensions
 
 def walk_extensions() -> Iterator[str]:
     """
