@@ -33,7 +33,7 @@ class Ranking(commands.Cog):
             return
 
         try:
-            ranking : models.Ranking = await sta(models.Ranking.objects.create)(
+            ranking : models.Ranking = await models.Ranking.objects.acreate(
                 name = name,
                 token = token,
                 description = "",
@@ -44,7 +44,7 @@ class Ranking(commands.Cog):
                 await ctx.send("Failed to create ranking")
             
             else:
-                ranking_channel : models.RankingChannel = await sta(models.RankingChannel.objects.create)(
+                ranking_channel : models.RankingChannel = await models.RankingChannel.objects.acreate(
                     ranking = ranking,
                     channel_id = ctx.channel.id,
                     guild_id = ctx.guild.id
@@ -53,13 +53,41 @@ class Ranking(commands.Cog):
                     await ctx.send(f"Failed to link ranking (#{ranking.id}) to channel")
                 
                 else:
-                    await ctx.send(f"Created ranking {ranking.name} (#{ranking.id}) with {'no token' if not ranking.token else f'token {ranking.token}'}")
-            
+                    await ctx.send(f"Created ranking {ranking.name} (#{ranking.id}) with {'default +/- tokens' if not ranking.token else f'token {ranking.token}'}")
         
         except Exception as e:
             await ctx.send(f"Failed to create ranking")
             self.bot.logger.error(f"Failed to create ranking: {e}")
 
+    @commands.command()
+    async def list(self, ctx: commands.Context, inactive: str = None):
+        """
+        ```
+        List all rankings in the current channel
+
+        Arguments:
+        - inactive: If set to "all", list all rankings, including inactive ones
+        ```
+        """
+        try:
+            rankings = []
+            ranking_channels = models.RankingChannel.objects.filter(channel_id = ctx.channel.id)
+            async for ranking_channel in ranking_channels:
+                ranking = await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
+                if ranking.active or inactive == "all":
+                    rankings.append(
+                        f"- {ranking.name} (#{ranking.id})"
+                    )
+
+            if len(rankings) == 0:
+                await ctx.send("No rankings found in this channel")
+            
+            else:
+                await ctx.send(f"## Current ranking{'s' if len(ranking_channels) > 1 else ''}\n" + "\n".join(rankings))
+        
+        except Exception as e:
+            await ctx.send(f"Failed to list rankings")
+            self.bot.logger.error(f"Failed to list rankings: {e}")
         
 
 
