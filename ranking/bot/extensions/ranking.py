@@ -1,4 +1,6 @@
 from asgiref.sync import sync_to_async as sta
+import asyncio
+import re
 
 from discord import Interaction, Message
 from discord.ext import commands
@@ -7,7 +9,6 @@ from bot.bot import Bot
 
 from website import models
 
-import re
 
 def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> str:
     """
@@ -260,15 +261,13 @@ class Ranking(commands.Cog):
             self.bot.logger.error(f"Failed to show ranking: {e}")
 
     @commands.Cog.listener("on_message")
-    async def example_listener(self, message: Message):
+    async def ranking_listener(self, message: Message):
         """
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
         if message.author.bot and message.author.id == self.bot.user.id:
             return
         
-        self.bot.logger.info(f"{message.author.id} - {message.author.name} - {self.bot.user.id} - {self.bot.user.name}")
-
         if "http" in message.content:
             return
         
@@ -302,6 +301,44 @@ class Ranking(commands.Cog):
             self.bot.logger.error(f"Failed to parse message: {e}")
             return
 
+    @commands.Cog.listener("on_message_edit")
+    async def ranking_edit_listener(self, before: Message, message: Message):
+        """
+        https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
+        """
+        if message.author.bot and message.author.id == self.bot.user.id:
+            return
+
+        if "http" in message.content:
+            return
+        
+        try:
+            message_entries = await sta(models.Entry.objects.filter)(
+                message_id = before.id
+            )
+            if await message_entries.acount() == 0:
+                return
+
+            async for entry in message_entries:
+                ranking = await models.Ranking.objects.aget(id = entry.ranking_id)
+                if ranking.active:
+                    s = parse_message(message.content, ranking.token)
+                    
+                    if s is not None:
+                        entry.number = s
+                        entry.message_id = message.id
+                        await entry.asave()
+            
+            asyncio.create_task(self.update_reactions(message))
+        
+        except Exception as e:
+            self.bot.logger.error(f"Failed to parse message: {e}")
+            return
+    
+    async def update_reactions(self, message: Message):
+        await message.add_reaction("🔁")
+        await asyncio.sleep(20)
+        await message.remove_reaction("🔁", self.bot.user)
 
 async def setup(bot: Bot):
     await bot.add_cog(Ranking(bot))
