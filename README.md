@@ -4,7 +4,11 @@ See the [discord.py docs](https://discordpy.readthedocs.io/en/stable/) for more 
 
 ## Running
 
-Make a file called `discord_token.txt` in the folder `secrets/` and paste your discord token into it.
+Create a .env file:
+```
+DISCORD_TOKEN=
+POSTGRES_PASSWORD=
+```
 
 Run `docker compose up --build` to start the bot.
 
@@ -18,5 +22,6 @@ Add dependencies with `poetry add <dep>` and make sure they're installed with `p
 
 ## Adding commands
 
-Any file with a setup function for a Cog in the `bot/extensions/` folder will automatically be
-added to the bot on startup
+The project follows the standard Django structure with apps for modular functionality, including a `ranking` app for core features. The `ranking/bot` folder contains the bot logic and extensions for Discord integration.
+
+Any file with a setup function for a Cog in the `ranking/bot/extensions/` folder will automatically be added to the bot on startup.
