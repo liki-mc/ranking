@@ -34,7 +34,13 @@ class Entry(TimeStamp):
     ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
     number = models.FloatField(default = 1)
     user = models.BigIntegerField(blank = False)
-    message_id = models.BigIntegerField(blank = False, unique = True)
+    message_id = models.BigIntegerField(blank = False)
+
+    def __str__(self):
+        return (self.ranking.name + " - " + str(self.number))
+    
+    class Meta:
+        unique_together = ('ranking', 'message_id')
 
 class User(TimeStamp):
     name = models.CharField(max_length = 200, blank = False)

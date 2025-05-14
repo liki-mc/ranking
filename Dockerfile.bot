@@ -20,4 +20,4 @@ RUN poetry install
 
 COPY ./ranking ./ranking
 
-CMD [ "python3", "-m", "ranking.run_bot" ]
+CMD [ "python3", "ranking/manage.py", "run_discord_bot" ]
