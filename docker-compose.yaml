@@ -5,8 +5,8 @@ services:
             dockerfile: Dockerfile.site
         container_name: site
         restart: "no"
+        env_file: .env
         environment:
-            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
             - POSTGRES_HOST=host.docker.internal
     
     bot:
@@ -15,7 +15,6 @@ services:
             dockerfile: Dockerfile.bot
         container_name: bot
         restart: "no"
+        env_file: .env
         environment:
-            - DISCORD_TOKEN=${DISCORD_TOKEN}
-            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
             - POSTGRES_HOST=host.docker.internal

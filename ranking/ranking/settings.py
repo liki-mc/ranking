@@ -21,10 +21,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = getenv("DJANGO_SECRET_KEY", 'django-insecure-87e)+fus2-6k_hvy4gymam6coxgq6o)x6^1t@hr$7c1g^!3ib7')
+SECRET_KEY = getenv("DJANGO_SECRET_KEY") or 'django-insecure-87e)+fus2-6k_hvy4gymam6coxgq6o)x6^1t@hr$7c1g^!3ib7'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = getenv("DJANGO_DEBUG", 'True') == 'True'
+DEBUG = (getenv("DJANGO_DEBUG") or 'True') == 'True'
 
 ALLOWED_HOSTS = []
 
@@ -79,10 +79,10 @@ WSGI_APPLICATION = 'ranking.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": getenv("POSTGRES_DB", "ranking"),
-        "USER": getenv("POSTGRES_USER", "ranking"),
-        "PASSWORD": getenv("POSTGRES_PASSWORD", "ranking"),
-        "HOST": getenv("POSTGRES_HOST", "localhost"),
+        "NAME": getenv("POSTGRES_DB") or "ranking",
+        "USER": getenv("POSTGRES_USER") or "ranking",
+        "PASSWORD": getenv("POSTGRES_PASSWORD") or "ranking",
+        "HOST": getenv("POSTGRES_HOST") or "localhost",
         "PORT": "5432",
     }
 }
