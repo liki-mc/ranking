@@ -18,7 +18,13 @@ class Bot(commands.Bot):
 
         help_command = commands.MinimalHelpCommand()
 
-        super().__init__(command_prefix="$", *args, intents=intents, help_command = help_command, **kwargs)
+        super().__init__(
+            command_prefix = "°", 
+            *args, 
+            intents = intents, 
+            help_command = help_command, 
+            **kwargs
+        )
 
     async def load_extensions(self) -> None:
         from bot.extensions import EXTENSIONS

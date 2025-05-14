@@ -1,9 +1,11 @@
+from asgiref.sync import sync_to_async as sta
+
 from discord import Interaction, Message
 from discord.ext import commands
 
 from bot.bot import Bot
 
-from website.models import *
+from website import models
 
 
 class Ranking(commands.Cog):
@@ -15,35 +17,51 @@ class Ranking(commands.Cog):
         if command:
             command.help = self.create.__doc__
 
-    @commands.command(
-        name = "create",
-        
-    )
-    async def create(self, ctx: commands.Context, name: str, token: str = None):
+    @commands.command()
+    async def create(self, ctx: commands.Context, name: str = None, token: str = None):
         """
-        *Create a ranking in the current channel*
+        ```
+        Create a ranking in the current channel
 
-        __Arguments__:
+        Arguments:
         - name:  The name of the ranking
         - token: The token of the ranking (optional)
+        ```
         """
-        if ctx.channel.id != 0:
-            return await ctx.send("This command is disabled in this channel")
-        
-        url = f"{URL}{path}/"
-        data = {
-            "name": name,
-            "token": token,
-            "channel": ctx.channel.id
-        }
-        async with self.bot.session.post(url, json = data) as resp:
-            if resp.status != 201:
-                self.bot.logger.error(f"failed to create ranking, reason: {await resp.text()}")
-                return await ctx.send("Failed to create ranking")
+        if not name:
+            await ctx.send("Please provide a name for the ranking")
+            return
+
+        try:
+            ranking : models.Ranking = await sta(models.Ranking.objects.create)(
+                name = name,
+                token = token,
+                description = "",
+                active = True,
+                reverse_sort = False
+            )
+            if not isinstance(ranking, models.Ranking):
+                await ctx.send("Failed to create ranking")
             
-            rid = (await resp.json())["rid"]
-            self.channels.setdefault(ctx.channel.id, []).append((token, rid))
-            return await ctx.send("Created ranking")
+            else:
+                ranking_channel : models.RankingChannel = await sta(models.RankingChannel.objects.create)(
+                    ranking = ranking,
+                    channel_id = ctx.channel.id,
+                    guild_id = ctx.guild.id
+                )
+                if not isinstance(ranking_channel, models.RankingChannel):
+                    await ctx.send(f"Failed to link ranking (#{ranking.id}) to channel")
+                
+                else:
+                    await ctx.send(f"Created ranking {ranking.name} (#{ranking.id}) with {'no token' if not ranking.token else f'token {ranking.token}'}")
+            
+        
+        except Exception as e:
+            await ctx.send(f"Failed to create ranking")
+            self.bot.logger.error(f"Failed to create ranking: {e}")
+
+        
+
 
     @commands.Cog.listener("on_message")
     async def example_listener(self, msg: Message):
