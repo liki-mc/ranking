@@ -7,6 +7,8 @@ from bot.bot import Bot
 
 from website import models
 
+import re
+
 def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> str:
     """
     Format a list of rankings into a string
@@ -73,6 +75,27 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> st
             s += f"1. {entry[1]['name']}: {entry[1]['string']} = {entry[1]['score']}\n"
     
     return s
+
+def to_float(number: str) -> float:
+    """
+    Convert a string to a float
+    """
+    try:
+        return float(number.replace(",", "."))
+    except ValueError:
+        return 0.0
+    except TypeError:
+        return 0.0
+
+def parse_message(message: str, token: str = None) -> tuple[float, str]:
+    s = 0.0
+    matches = False
+    regex_string = f"(?:{re.escape(token)}) ?(\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-] ?\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)"
+    for match in re.finditer(regex_string, message):
+        matches = True
+        s += to_float(match.group(1))
+    
+    return s if matches else None
 
 class Ranking(commands.Cog):
     def __init__(self, bot: Bot) -> None:
@@ -237,16 +260,47 @@ class Ranking(commands.Cog):
             self.bot.logger.error(f"Failed to show ranking: {e}")
 
     @commands.Cog.listener("on_message")
-    async def example_listener(self, msg: Message):
+    async def example_listener(self, message: Message):
         """
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
-
-        if msg.author.bot:
+        if message.author.bot and message.author.id == self.bot.user.id:
             return
+        
+        self.bot.logger.info(f"{message.author.id} - {message.author.name} - {self.bot.user.id} - {self.bot.user.name}")
 
-        if self.bot.user in msg.mentions:
-            await msg.reply("hello")
+        if "http" in message.content:
+            return
+        
+        try:
+            ranking_channels = await sta(models.RankingChannel.objects.filter)(
+                channel_id = message.channel.id
+            )
+            async for ranking_channel in ranking_channels:
+                matches = False
+                ranking = await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
+                if ranking.active:
+                    s = parse_message(message.content, ranking.token)
+                    
+                    if s is not None:
+                        matches = True
+                        entry : models.Entry = await models.Entry.objects.acreate(
+                            ranking = ranking,
+                            number = s,
+                            user = message.author.id,
+                            message_id = message.id
+                        )
+                        await entry.asave()
+                        if not isinstance(entry, models.Entry):
+                            await message.add_reaction("❌")
+                            self.bot.logger.error(f"Failed to create entry for {message.author.name} in {ranking.name}")
+                
+                if matches:
+                    await message.add_reaction("✅")
+        
+        except Exception as e:
+            self.bot.logger.error(f"Failed to parse message: {e}")
+            return
 
 
 async def setup(bot: Bot):
