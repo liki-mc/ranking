@@ -89,7 +89,40 @@ class Ranking(commands.Cog):
             await ctx.send(f"Failed to list rankings")
             self.bot.logger.error(f"Failed to list rankings: {e}")
         
+    @commands.command()
+    async def link(self, ctx: commands.Context, ranking_id: int = None):
+        """
+        ```
+        Link a ranking to the current channel
 
+        Arguments:
+        - ranking_id: The ID of the ranking to link
+        ```
+        """
+        if not ranking_id:
+            await ctx.send("Please provide a ranking ID")
+            return
+
+        try:
+            ranking : models.Ranking = await models.Ranking.objects.aget(id = ranking_id)
+            if not ranking:
+                await ctx.send(f"Ranking with ID {ranking_id} not found")
+                return
+            
+            ranking_channel : models.RankingChannel = await models.RankingChannel.objects.acreate(
+                ranking = ranking,
+                channel_id = ctx.channel.id,
+                guild_id = ctx.guild.id
+            )
+            if not isinstance(ranking_channel, models.RankingChannel):
+                await ctx.send(f"Failed to link ranking (#{ranking_id}) to channel")
+            
+            else:
+                await ctx.send(f"Linked ranking {ranking_channel.ranking.name} (#{ranking_channel.ranking.id}) to channel")
+        
+        except Exception as e:
+            await ctx.send(f"Failed to link ranking")
+            self.bot.logger.error(f"Failed to link ranking: {e}")
 
     @commands.Cog.listener("on_message")
     async def example_listener(self, msg: Message):
