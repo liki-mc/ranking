@@ -7,7 +7,7 @@ from bot.bot import Bot
 
 from website import models
 
-def format_rankings(rankings: list[models.Ranking], users: dict[int, str], logger) -> str:
+def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> str:
     """
     Format a list of rankings into a string
     """
@@ -18,13 +18,11 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str], logge
             user__in = users.keys()
         )
         scores = {user: {"score": 0, "last_updated": 0} for user in users.keys()}
-        logger.info(f"{scores}")
         for entry in entries:
             scores[entry.user] = {
                 "score": entry.number + scores[entry.user]["score"],
                 "last_updated": max(entry.updated_at.timestamp(), scores[entry.user]["last_updated"])
             }
-        logger.info("heyooosdqifjiqsjd")
 
         ranking_scores[ranking.id] = {
             "scores": scores,
@@ -48,7 +46,6 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str], logge
 
         
         s += f"## {ranking.name} (#{ranking.id})\n"
-        logger.info(sorted_scores)
         for user_id, user_data in sorted_scores:
             s += f"1. {users[user_id]}: {user_data['score']}\n"
         
@@ -58,7 +55,8 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str], logge
             for user_id, user in ranking_info["scores"].items():
                 users[user_id]["score"] += user["score"]
                 users[user_id]["last_updated"] = max(users[user_id]["last_updated"], user["last_updated"])
-                users[user_id]["string"] += f"{ranking_info['ranking'].token}{user['score']}\n"
+                display_token = ranking_info["ranking"].token if ranking_info["ranking"].token is not None else ('+' if user['score'] >= 0 else '')
+                users[user_id]["string"] += f" {display_token}{user['score']}"
         
         # Sort the scores by score and last_updated
         sorted_scores = sorted(
@@ -202,16 +200,17 @@ class Ranking(commands.Cog):
         - ranking_id: The ID of the ranking to show (optional)
         ```
         """
+        rankings = []
         if ranking_id is None:
-            ranking_ids = await sta(models.RankingChannel.objects.filter(
+            ranking_channels = await sta(models.RankingChannel.objects.filter)(
                 channel_id = ctx.channel.id
-            ).values_list)('ranking_id', flat = True)
-            if not ranking_ids:
-                await ctx.send("No rankings found in this channel")
-                return
-            ranking_id = ranking_ids[0]
-
-        try:
+            )
+            async for ranking_channel in ranking_channels:
+                rankings.append(
+                    await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
+                )
+        
+        else:
             ranking : models.Ranking = await models.Ranking.objects.aget(id = ranking_id)
             if not ranking:
                 await ctx.send(f"Ranking with ID {ranking_id} not found")
@@ -224,12 +223,14 @@ class Ranking(commands.Cog):
             )
             if not isinstance(ranking_channel, models.RankingChannel):
                 await ctx.send(f"Ranking (#{ranking_id}) is not linked to this channel")
+                return
             
-            else:
-                users = {m.id: m.display_name for m in ctx.channel.members if not m.bot}
-                self.bot.logger.info(f"{users}")
-                formatted_string = await sta(format_rankings)([ranking], users, self.bot.logger)
-                await ctx.send(formatted_string)
+            rankings.append(ranking)
+
+        try:
+            users = {m.id: m.display_name for m in ctx.channel.members if not m.bot}
+            formatted_string = await sta(format_rankings)(rankings, users)
+            await ctx.send(formatted_string)
         
         except Exception as e:
             await ctx.send(f"Failed to show ranking")
