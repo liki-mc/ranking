@@ -13,6 +13,7 @@ class Bot(commands.Bot):
     def __init__(self, *args, **kwargs):
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.members = True
 
         self.logger = logger
 
