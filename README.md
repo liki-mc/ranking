@@ -1,6 +1,8 @@
-# Discord bot template
+# Ranking site and discord bot
 
-See the [discord.py docs](https://discordpy.readthedocs.io/en/stable/) for more info
+See the [discord.py docs](https://discordpy.readthedocs.io/en/stable/) for more info.
+
+See the [django docs](https://docs.djangoproject.com/en/5.2/) for more info.
 
 ## Running
 
