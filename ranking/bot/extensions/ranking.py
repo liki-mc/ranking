@@ -50,16 +50,18 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> st
         
         s += f"## {ranking.name} (#{ranking.id})\n"
         for user_id, user_data in sorted_scores:
-            s += f"1. {users[user_id]}: {user_data['score']}\n"
+            score = round(user_data["score"], 2)
+            if score != 0 or not users[user_id][1]:
+                s += f"1. {users[user_id][0]}: {round(user_data['score'], 2)}\n"
         
     else:
-        users = {user_id: {"score": 0, "last_updated": 0, "name": user_name, "string": ""} for user_id, user_name in users.items()}
+        users = {user_id: {"score": 0, "last_updated": 0, "name": user_info[0], "string": "", "bot": user_info[1]} for user_id, user_info in users.items()}
         for ranking_id, ranking_info in ranking_scores.items():
             for user_id, user in ranking_info["scores"].items():
                 users[user_id]["score"] += user["score"]
                 users[user_id]["last_updated"] = max(users[user_id]["last_updated"], user["last_updated"])
                 display_token = ranking_info["ranking"].token if ranking_info["ranking"].token is not None else ('+' if user['score'] >= 0 else '')
-                users[user_id]["string"] += f" {display_token}{user['score']}"
+                users[user_id]["string"] += f" {display_token}{round(user['score'], 1)}"
         
         # Sort the scores by score and last_updated
         sorted_scores = sorted(
@@ -68,12 +70,13 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> st
                 key = lambda x: x[1]["last_updated"],
             ),
             key = lambda x: x[1]["score"],
-            reverse = False
+            reverse = True
         )
 
         s += f"## Rankings\n"
         for entry in sorted_scores:
-            s += f"1. {entry[1]['name']}: {entry[1]['string']} = {entry[1]['score']}\n"
+            if entry[1]["score"] != 0 or not entry[1]["bot"]:
+                s += f"1. {entry[1]['name']}: {entry[1]['string']} = {round(entry[1]['score'], 1)}\n"
     
     return s
 
@@ -252,7 +255,7 @@ class Ranking(commands.Cog):
             rankings.append(ranking)
 
         try:
-            users = {m.id: m.display_name for m in ctx.channel.members if not m.bot}
+            users = {m.id: (m.display_name, m.bot) for m in ctx.channel.members}
             formatted_string = await sta(format_rankings)(rankings, users)
             await ctx.send(formatted_string)
         
