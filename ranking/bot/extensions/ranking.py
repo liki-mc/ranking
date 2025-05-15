@@ -91,13 +91,17 @@ def to_float(number: str) -> float:
     except TypeError:
         return 0.0
 
-def parse_message(message: str, token: str = None) -> tuple[float, str]:
+def parse_message(message: str, token: str = None, mappings: dict[str, float] = {}) -> tuple[float, str]:
     s = 0.0
     matches = False
     regex_string = f"(?:{re.escape(token)}) ?(\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-] ?\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)"
+    if mappings:
+        regex_string += f" ?((?:{')|(?:'.join([re.escape(k) for k in mappings.keys()])}))?"
+
     for match in re.finditer(regex_string, message):
         matches = True
-        s += to_float(match.group(1))
+        multiplier = 1.0 if (len(match.groups()) < 2) else mappings.get(match.group(2), 1)
+        s += to_float(match.group(1)) * multiplier
     
     return s if matches else None
 
@@ -133,6 +137,7 @@ class Ranking(commands.Cog):
                 active = True,
                 reverse_sort = False
             )
+            await ranking.asave()
             if not isinstance(ranking, models.Ranking):
                 await ctx.send("Failed to create ranking")
             
@@ -142,6 +147,7 @@ class Ranking(commands.Cog):
                     channel_id = ctx.channel.id,
                     guild_id = ctx.guild.id
                 )
+                await ranking_channel.asave()
                 if not isinstance(ranking_channel, models.RankingChannel):
                     await ctx.send(f"Failed to link ranking (#{ranking.id}) to channel")
                 
@@ -207,6 +213,7 @@ class Ranking(commands.Cog):
                 channel_id = ctx.channel.id,
                 guild_id = ctx.guild.id
             )
+            await ranking_channel.asave()
             if not isinstance(ranking_channel, models.RankingChannel):
                 await ctx.send(f"Failed to link ranking (#{ranking_id}) to channel")
             
@@ -263,6 +270,55 @@ class Ranking(commands.Cog):
             await ctx.send(f"Failed to show ranking")
             self.bot.logger.error(f"Failed to show ranking: {e}")
 
+    @commands.command()
+    async def add(self, ctx: commands.Context, string: str = None, value: float = None, ranking_id: int = None):
+        """
+        ```
+        Add a mapping to a ranking
+
+        Arguments:
+        - string: The string to map
+        - value: The value to map the string to
+        - ranking_id: The ID of the ranking to add the mapping to (optional)
+        ```
+        """
+        if not string or not value:
+            await ctx.send("Please provide a string and value")
+            return
+        
+        
+        try:
+            ranking_ids = [ranking_id]
+            if ranking_id is None:
+                ranking_ids = []
+                ranking_channels = await sta(models.RankingChannel.objects.filter)(
+                    channel_id = ctx.channel.id
+                )
+                async for ranking_channel in ranking_channels:
+                    ranking_ids.append(ranking_channel.ranking_id)
+
+            for ranking_id in ranking_ids:
+                ranking : models.Ranking = await models.Ranking.objects.aget(id = ranking_id)
+                if not isinstance(ranking, models.Ranking):
+                    await ctx.send(f"Failed to get ranking (#{ranking_id})")
+                    return
+                
+                mapping : models.Mapping = await models.Mapping.objects.acreate(
+                    ranking = ranking,
+                    string = string,
+                    value = value
+                )
+                await mapping.asave()
+                if not isinstance(mapping, models.Mapping):
+                    await ctx.send(f"Failed to add mapping")
+                
+                else:
+                    await ctx.send(f"Added mapping {mapping.string} ({mapping.value}) to ranking {mapping.ranking.name} (#{mapping.ranking.id})")
+        
+        except Exception as e:
+            await ctx.send(f"Failed to add mapping")
+            self.bot.logger.error(f"Failed to add mapping: {e}")
+
     @commands.Cog.listener("on_message")
     async def ranking_listener(self, message: Message):
         """
@@ -282,7 +338,14 @@ class Ranking(commands.Cog):
                 matches = False
                 ranking = await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
                 if ranking.active:
-                    s = parse_message(message.content, ranking.token)
+                    mappings = await sta(models.Mapping.objects.filter)(
+                        ranking_id = ranking.id
+                    )
+                    mapping_dict = {}
+                    async for mapping in mappings:
+                        mapping_dict[mapping.string] = mapping.value
+
+                    s = parse_message(message.content, ranking.token, mapping_dict)
                     
                     if s is not None:
                         matches = True
@@ -302,6 +365,7 @@ class Ranking(commands.Cog):
         
         except Exception as e:
             self.bot.logger.error(f"Failed to parse message: {e}")
+            await message.add_reaction("❓")
             return
 
     @commands.Cog.listener("on_message_edit")
@@ -336,6 +400,7 @@ class Ranking(commands.Cog):
         
         except Exception as e:
             self.bot.logger.error(f"Failed to parse message: {e}")
+            await message.add_reaction("❓")
             return
     
     async def update_reactions(self, message: Message):
