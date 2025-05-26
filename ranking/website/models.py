@@ -1,5 +1,7 @@
 from django.db import models
 
+from datetime import datetime
+
 # Create your models here.
 class TimeStamp(models.Model):
     created_at = models.DateTimeField(auto_now_add = True)
@@ -17,6 +19,26 @@ class Ranking(TimeStamp):
 
     def __str__(self):
         return self.name
+    
+    @property
+    def from_time(self) -> datetime:
+        active_subrankings = self.subranking_set.filter(
+            models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
+            active_from__lte = datetime.now()
+        )
+        if active_subrankings:
+            return min(active_subrankings, key = lambda x: x.active_from).active_from
+        return datetime(1970, 1, 1)
+
+    @property
+    def subranking_name(self) -> str:
+        active_subrankings = self.subranking_set.filter(
+            models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
+            active_from__lte = datetime.now()
+        )
+        if active_subrankings:
+            return min(active_subrankings, key = lambda x: x.active_from).name
+        return ""
 
 class RankingChannel(TimeStamp):
     ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
@@ -64,3 +86,16 @@ class Mapping(TimeStamp):
     
     class Meta:
         unique_together = ('ranking', 'string')
+
+class Subranking(TimeStamp):
+    ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
+    name = models.CharField(max_length = 200, blank = False)
+    description = models.TextField(blank = True)
+    active_from = models.DateTimeField(default = datetime.now())
+    active_until = models.DateTimeField(null = True, blank = True)
+
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        pass
