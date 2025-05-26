@@ -9,6 +9,9 @@ from bot.bot import Bot
 
 from website import models
 
+from django.db import close_old_connections
+
+import traceback
 
 def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> str:
     """
@@ -125,6 +128,7 @@ class Ranking(commands.Cog):
         - token: The token of the ranking (optional)
         ```
         """
+        await sta(close_old_connections)()
         if not name:
             await ctx.send("Please provide a name for the ranking")
             return
@@ -168,6 +172,7 @@ class Ranking(commands.Cog):
         - inactive: If set to "all", list all rankings, including inactive ones
         ```
         """
+        await sta(close_old_connections)()
         try:
             rankings = []
             ranking_channels = models.RankingChannel.objects.filter(channel_id = ctx.channel.id)
@@ -198,6 +203,7 @@ class Ranking(commands.Cog):
         - ranking_id: The ID of the ranking to link
         ```
         """
+        await sta(close_old_connections)()
         if not ranking_id:
             await ctx.send("Please provide a ranking ID")
             return
@@ -234,6 +240,7 @@ class Ranking(commands.Cog):
         - ranking_id: The ID of the ranking to show (optional)
         ```
         """
+        await sta(close_old_connections)()
         rankings = []
         if ranking_id is None:
             ranking_channels = await sta(models.RankingChannel.objects.filter)(
@@ -282,6 +289,7 @@ class Ranking(commands.Cog):
         - ranking_id: The ID of the ranking to add the mapping to (optional)
         ```
         """
+        await sta(close_old_connections)()
         if not string or not value:
             await ctx.send("Please provide a string and value")
             return
@@ -324,6 +332,7 @@ class Ranking(commands.Cog):
         """
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
+        await sta(close_old_connections)()
         if message.author.bot and message.author.id == self.bot.user.id:
             return
         
@@ -365,7 +374,8 @@ class Ranking(commands.Cog):
         
         except Exception as e:
             self.bot.logger.error(f"Failed to parse message: {e}")
-            await message.add_reaction("❓")
+            # await message.add_reaction("❓")
+            self.bot.logger.error(f"{traceback.format_exc()}")
             return
 
     @commands.Cog.listener("on_message_edit")
@@ -373,6 +383,7 @@ class Ranking(commands.Cog):
         """
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
+        await sta(close_old_connections)()
         if message.author.bot and message.author.id == self.bot.user.id:
             return
 
@@ -400,7 +411,8 @@ class Ranking(commands.Cog):
         
         except Exception as e:
             self.bot.logger.error(f"Failed to parse message: {e}")
-            await message.add_reaction("❓")
+            # await message.add_reaction("❓")
+            self.bot.logger.error(f"{traceback.format_exc()}")
             return
     
     async def update_reactions(self, message: Message):
