@@ -1,5 +1,6 @@
 from asgiref.sync import sync_to_async as sta
 import asyncio
+from datetime import datetime, date, time
 import re
 
 from discord import Interaction, Message
@@ -18,7 +19,8 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> st
     for ranking in rankings:
         entries = models.Entry.objects.filter(
             ranking_id = ranking.id,
-            user__in = users.keys()
+            user__in = users.keys(),
+            created_at__gte = ranking.from_time
         )
         scores = {user: {"score": 0, "last_updated": 0} for user in users.keys()}
         for entry in entries:
@@ -105,6 +107,45 @@ def parse_message(message: str, token: str = None, mappings: dict[str, float] = 
     
     return s if matches else None
 
+def parse_time(time_str: str) -> datetime:
+    """
+    Parse a time string into a datetime object
+    """
+    if time_str == "now":
+        # Return the current date and time
+        return datetime.now()
+    elif time_str == "today":
+        # Return today's date at 03:00 AM
+        return datetime.combine(date.today(), time(3))
+    try:
+        # Try parsing with date and time (YYYY/MM/DD-HH:MM:SS)
+        return datetime.strptime(time_str, "%Y/%m/%d-%H:%M:%S")
+    except ValueError or TypeError:
+        try:
+            # Try parsing with date and time (DD/MM/YYYY-HH:MM:SS)
+            return datetime.strptime(time_str, "%d/%m/%Y-%H:%M:%S")
+        except ValueError or TypeError:
+            try:
+                # Try parsing with date only (YYYY/MM/DD)
+                return datetime.combine(
+                    datetime.strptime(time_str, "%Y/%m/%d").date(),
+                    time(3, 0)
+                )
+            except ValueError or TypeError:
+                try:
+                    # Try parsing with date only (DD/MM/YYYY)
+                    return datetime.combine(
+                        datetime.strptime(time_str, "%d/%m/%Y").date(),
+                        time(3, 0)
+                    )
+                except ValueError or TypeError:
+                    # Try parsing with Discord's timestamp format
+                    matches = re.match(r"^<t:(\d+):[fFdDtTR]>$", time_str)
+                    if matches:
+                        return datetime.fromtimestamp(int(matches.group(1)))
+                    
+                    raise ValueError(f"Invalid time format: {time_str}. Expected format: YYYY/MM/DD-HH:MM:SS or DD/MM/YYYY-HH:MM:SS or <t:1234567890:f/d/t/r> or 'now' or 'today'.")
+
 class Ranking(commands.Cog):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
@@ -170,7 +211,7 @@ class Ranking(commands.Cog):
         """
         try:
             rankings = []
-            ranking_channels = models.RankingChannel.objects.filter(channel_id = ctx.channel.id)
+            ranking_channels = await sta(models.RankingChannel.objects.filter)(channel_id = ctx.channel.id)
             async for ranking_channel in ranking_channels:
                 ranking = await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
                 if ranking.active or inactive == "all":
@@ -318,6 +359,70 @@ class Ranking(commands.Cog):
         except Exception as e:
             await ctx.send(f"Failed to add mapping")
             self.bot.logger.error(f"Failed to add mapping: {e}")
+    
+    @commands.command()
+    async def count(self, ctx: commands.Context, from_str: str = None, start_time_: str = None, name: str = None, ranking_id: str = None):
+        """
+        ```
+        Create a subranking starting from given time, subrankings allow you to start counting from a specific time.
+        Usage: count from <start_time> <name> [ranking_id]
+
+        Arguments:
+        - from: 'from'
+        - start_time_: The start time of the subranking (e.g. "18/08/2002-12:00:00" or "20/08/2002" or "now" or "today" or a discord timestamp)
+        - name: The name of the subranking
+        - ranking_id: The ID of the ranking to create the subranking for (optional)
+        ```
+        """
+        if from_str != "from":
+            await ctx.send("Please use the 'from' keyword")
+            return
+        if not name or not start_time_:
+            await ctx.send("Please provide a name and start time")
+            return
+        
+        start_time = parse_time(start_time_)
+        
+        try:
+            ranking_ids = [ranking_id]
+            if ranking_id is None:
+                ranking_ids = []
+                ranking_channels = await sta(models.RankingChannel.objects.filter)(
+                    channel_id = ctx.channel.id
+                )
+                async for ranking_channel in ranking_channels:
+                    ranking_ids.append(ranking_channel.ranking_id)
+
+            for ranking_id in ranking_ids:
+                # limit the time of the current subranking(s)
+                current_subrankings = await sta(models.Subranking.objects.filter)(
+                    ranking_id = ranking_id,
+                    active_from__lte = start_time,
+                    active_until__isnull = True
+                )
+                async for subranking in current_subrankings:
+                    # set the active_until time of the current subranking to the start_time of the new subranking
+                    subranking.active_until = start_time
+                    await subranking.asave()
+            
+                ranking : models.Ranking = await models.Ranking.objects.aget(id = ranking_id)
+                if not isinstance(ranking, models.Ranking):
+                    await ctx.send(f"Failed to get ranking (#{ranking_id})")
+                    return
+                
+                subranking : models.Subranking = await models.Subranking.objects.acreate(
+                    ranking = ranking,
+                    name = name,
+                    active_from = start_time,
+                    active_until = None
+                )
+                await subranking.asave()
+            
+                await ctx.send(f"{ranking.name} (#{ranking.id}) will count from <t:{int(start_time.timestamp())}:f>")
+
+        except Exception as e:
+            await ctx.send(f"Failed to create subranking")
+            self.bot.logger.error(f"Failed to create subranking: {e}")
 
     @commands.Cog.listener("on_message")
     async def ranking_listener(self, message: Message):
