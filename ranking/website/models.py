@@ -30,6 +30,16 @@ class Ranking(TimeStamp):
             return min(active_subrankings, key = lambda x: x.active_from).active_from
         return datetime(1970, 1, 1)
 
+    @property
+    def subranking_name(self) -> str:
+        active_subrankings = self.subranking_set.filter(
+            models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
+            active_from__lte = datetime.now()
+        )
+        if active_subrankings:
+            return min(active_subrankings, key = lambda x: x.active_from).name
+        return ""
+
 class RankingChannel(TimeStamp):
     ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
     channel_id = models.BigIntegerField(blank = False)

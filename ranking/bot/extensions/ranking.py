@@ -50,7 +50,7 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> st
         )
 
         
-        s += f"## {ranking.name} (#{ranking.id})\n"
+        s += f"## {ranking.name} {ranking.subranking_name} (#{ranking.id})\n"
         for user_id, user_data in sorted_scores:
             score = round(user_data["score"], 2)
             if score != 0 or not users[user_id][1]:
