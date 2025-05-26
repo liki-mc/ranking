@@ -105,6 +105,23 @@ def parse_message(message: str, token: str = None, mappings: dict[str, float] = 
     
     return s if matches else None
 
+def is_command(message: Message, bot: Bot) -> bool:
+    """
+    Check if a message is a command
+    """
+    prefixes = bot.command_prefix
+    if callable(prefixes):
+        prefixes = prefixes(bot, message)
+    
+    if isinstance(prefixes, str):
+        prefixes = [prefixes]
+    
+    for prefix in prefixes:
+        if message.content.startswith(prefix):
+            return True
+    
+    return False
+
 class Ranking(commands.Cog):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
@@ -330,6 +347,9 @@ class Ranking(commands.Cog):
         if "http" in message.content:
             return
         
+        if is_command(message, self.bot):
+            return
+        
         try:
             ranking_channels = await sta(models.RankingChannel.objects.filter)(
                 channel_id = message.channel.id
@@ -377,6 +397,9 @@ class Ranking(commands.Cog):
             return
 
         if "http" in message.content:
+            return
+        
+        if is_command(message, self.bot):
             return
         
         try:
