@@ -217,7 +217,7 @@ class Ranking(commands.Cog):
             self.bot.logger.error(f"Failed to create ranking: {e}")
 
     @commands.command()
-    async def list(self, ctx: commands.Context, inactive: str = None):
+    async def rankings(self, ctx: commands.Context, inactive: str = None):
         """
         ```
         List all rankings in the current channel
@@ -376,6 +376,54 @@ class Ranking(commands.Cog):
         except Exception as e:
             await ctx.send(f"Failed to add mapping")
             self.bot.logger.error(f"Failed to add mapping: {e}")
+    
+    @commands.command()
+    async def list(self, ctx: commands.Context, ranking_id: str = None):
+        """
+        ```
+        List all modifiers in a ranking
+
+        Arguments:
+        - ranking_id: The ID of the ranking to list modifiers for (optional)
+        ```
+        """
+        try:
+            s = ""
+            if ranking_id is None:
+                ranking_channels = await sta(models.RankingChannel.objects.filter)(
+                    channel_id = ctx.channel.id
+                )
+                async for ranking_channel in ranking_channels:
+                    ranking_mappings = await sta(models.Mapping.objects.filter)(
+                        ranking_id = ranking_channel.ranking_id
+                    )
+                    if not await ranking_mappings.acount():
+                        continue
+                    
+                    ranking = await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
+                    s += f"## Modifiers for ranking {ranking.name} (#{ranking_channel.ranking_id})\n"
+                    s += "".join([f"- {mapping.string}: {mapping.value}\n" async for mapping in ranking_mappings])
+
+            else:
+                ranking_mappings = await sta(models.Mapping.objects.filter)(ranking_id = ranking_id)
+                if not await ranking_mappings.acount():
+                    await ctx.send(f"No modifiers found for ranking (#{ranking_id})")
+                    return
+                ranking = await models.Ranking.objects.aget(id = ranking_id)
+                s += f"## Modifiers for ranking {ranking.name} (#{ranking_id})\n"
+                s += "".join([f"- {mapping.string}: {mapping.value}\n" async for mapping in ranking_mappings])
+            
+            
+            self.bot.logger.info("Heyo")
+
+            if s == "":
+                await ctx.send("No modifiers found for channel rankings")
+            else:
+                await ctx.send(s)
+        
+        except Exception as e:
+            await ctx.send(f"Failed to list modifiers")
+            self.bot.logger.error(f"Failed to list modifiers: {e}")
     
     @commands.command()
     async def count(self, ctx: commands.Context, from_str: str = None, start_time_: str = None, name: str = None, ranking_id: str = None):
