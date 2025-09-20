@@ -178,13 +178,11 @@ class Ranking(commands.Cog):
     @commands.command()
     async def create(self, ctx: commands.Context, name: str = None, token: str = None):
         """
-        ```
         Create a ranking in the current channel
 
         Arguments:
         - name:  The name of the ranking
         - token: The token of the ranking (optional)
-        ```
         """
         await sta(close_old_connections)()
         if not name:
@@ -223,12 +221,10 @@ class Ranking(commands.Cog):
     @commands.command()
     async def rankings(self, ctx: commands.Context, inactive: str = None):
         """
-        ```
         List all rankings in the current channel
 
         Arguments:
         - inactive: If set to "all", list all rankings, including inactive ones
-        ```
         """
         await sta(close_old_connections)()
         try:
@@ -254,12 +250,10 @@ class Ranking(commands.Cog):
     @commands.command()
     async def link(self, ctx: commands.Context, ranking_id: int = None):
         """
-        ```
         Link a ranking to the current channel
 
         Arguments:
         - ranking_id: The ID of the ranking to link
-        ```
         """
         await sta(close_old_connections)()
         if not ranking_id:
@@ -291,12 +285,10 @@ class Ranking(commands.Cog):
     @commands.command()
     async def show(self, ctx: commands.Context, ranking_id: int = None):
         """
-        ```
         Show the ranking(s) in the current channel
 
         Arguments:
         - ranking_id: The ID of the ranking to show (optional)
-        ```
         """
         await sta(close_old_connections)()
         rankings = []
@@ -338,14 +330,12 @@ class Ranking(commands.Cog):
     @commands.command()
     async def add(self, ctx: commands.Context, string: str = None, value: float = None, ranking_id: int = None):
         """
-        ```
         Add a mapping to a ranking
 
         Arguments:
         - string: The string to map
         - value: The value to map the string to
         - ranking_id: The ID of the ranking to add the mapping to (optional)
-        ```
         """
         await sta(close_old_connections)()
         if not string or not value:
@@ -388,12 +378,10 @@ class Ranking(commands.Cog):
     @commands.command()
     async def list(self, ctx: commands.Context, ranking_id: str = None):
         """
-        ```
         List all modifiers in a ranking
 
         Arguments:
         - ranking_id: The ID of the ranking to list modifiers for (optional)
-        ```
         """
         try:
             s = ""
@@ -436,7 +424,6 @@ class Ranking(commands.Cog):
     @commands.command()
     async def count(self, ctx: commands.Context, from_str: str = None, start_time_: str = None, name: str = None, ranking_id: str = None):
         """
-        ```
         Create a subranking starting from given time, subrankings allow you to start counting from a specific time.
         Usage: count from <start_time> <name> [ranking_id]
 
@@ -445,7 +432,6 @@ class Ranking(commands.Cog):
         - start_time_: The start time of the subranking (e.g. "18/08/2002-12:00:00" or "20/08/2002" or "now" or "today" or a discord timestamp)
         - name: The name of the subranking
         - ranking_id: The ID of the ranking to create the subranking for (optional)
-        ```
         """
         if from_str != "from":
             await ctx.send("Please use the 'from' keyword")
