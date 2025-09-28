@@ -49,7 +49,7 @@ def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> st
                 key = lambda x: x[1]["last_updated"],
             ),
             key = lambda x: x[1]["score"],
-            reverse = not ranking.reverse_sort
+            reverse = not ranking.settings.reverse_sort
         )
 
         
@@ -195,7 +195,6 @@ class Ranking(commands.Cog):
                 token = token,
                 description = "",
                 active = True,
-                reverse_sort = False
             )
             await ranking.asave()
             if not isinstance(ranking, models.Ranking):

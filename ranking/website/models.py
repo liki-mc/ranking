@@ -1,6 +1,9 @@
 from django.db import models
 
 from datetime import datetime
+from annoying.fields import AutoOneToOneField
+
+from .rankingsettings import TIMEFRAME
 
 # Create your models here.
 class TimeStamp(models.Model):
@@ -10,12 +13,24 @@ class TimeStamp(models.Model):
     class Meta:
         abstract = True
 
+
+
+class Settings(models.Model):
+    ranking = AutoOneToOneField(
+        "website.Ranking", 
+        on_delete = models.CASCADE, 
+        primary_key = True
+    )
+    reverse_sort = models.BooleanField(default = False)
+    is_timestamp = models.BooleanField(default = False)
+    mean = models.CharField(max_length = 10, choices = TIMEFRAME)
+    median = models.CharField(max_length = 10, choices = TIMEFRAME)
+
 class Ranking(TimeStamp):
     name = models.CharField(max_length = 200, blank = False)
     token = models.CharField(max_length = 20, null = True, blank = True)
     description = models.TextField(blank = True)
     active = models.BooleanField(default = True)
-    reverse_sort = models.BooleanField(default = False)
 
     def __str__(self):
         return self.name
