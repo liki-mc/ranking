@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from asgiref.sync import sync_to_async as sta
 import asyncio
 from datetime import datetime, date, time
@@ -13,6 +15,11 @@ from website import models
 from django.db import close_old_connections
 
 import traceback
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from website.models import Ranking
 
 def format_rankings(rankings: list[models.Ranking], users: dict[int, str]) -> str:
     """
@@ -96,16 +103,23 @@ def to_float(number: str) -> float:
     except TypeError:
         return 0.0
 
-def parse_message(message: str, token: str = None, mappings: dict[str, float] = {}) -> tuple[float, str]:
+async def parse_message(message: str, ranking: Ranking) -> tuple[float, str]:
+    mappings = await sta(models.Mapping.objects.filter)(
+        ranking_id = ranking.id
+    )
+    mapping_dict: dict[str, float] = {}
+    async for mapping in mappings:
+        mapping_dict[mapping.string] = mapping.value
+
     s = 0.0
     matches = False
-    regex_string = f"(?:{re.escape(token)}) ?(\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)" if token is not None else r"([+-] ?\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)"
+    regex_string = f"(?:{re.escape(ranking.token)}) ?(\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)" if ranking.token is not None else r"([+-] ?\d+(?:(?:\.|,)\d+)?(?:[eE][+-]?\d+)?)"
     if mappings:
-        regex_string += f" ?((?:{')|(?:'.join([re.escape(k) for k in mappings.keys()])}))?"
+        regex_string += f" ?((?:{')|(?:'.join([re.escape(k) for k in mapping_dict.keys()])}))?"
 
     for match in re.finditer(regex_string, message):
         matches = True
-        multiplier = 1.0 if (len(match.groups()) < 2) else mappings.get(match.group(2), 1)
+        multiplier = 1.0 if (len(match.groups()) < 2) else mapping_dict.get(match.group(2), 1)
         s += to_float(match.group(1)) * multiplier
     
     return s if matches else None
@@ -488,13 +502,14 @@ class Ranking(commands.Cog):
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
         await sta(close_old_connections)()
+        
+        if is_command(message, self.bot):
+            return
+        
         if message.author.bot and message.author.id == self.bot.user.id:
             return
         
         if "http" in message.content:
-            return
-        
-        if is_command(message, self.bot):
             return
         
         try:
@@ -505,14 +520,7 @@ class Ranking(commands.Cog):
                 matches = False
                 ranking = await models.Ranking.objects.aget(id = ranking_channel.ranking_id)
                 if ranking.active:
-                    mappings = await sta(models.Mapping.objects.filter)(
-                        ranking_id = ranking.id
-                    )
-                    mapping_dict = {}
-                    async for mapping in mappings:
-                        mapping_dict[mapping.string] = mapping.value
-
-                    s = parse_message(message.content, ranking.token, mapping_dict)
+                    s = await parse_message(message.content, ranking)
                     
                     if s is not None:
                         matches = True
@@ -542,13 +550,14 @@ class Ranking(commands.Cog):
         https://discordpy.readthedocs.io/en/stable/api.html#event-reference for a list of events
         """
         await sta(close_old_connections)()
+        
+        if is_command(message, self.bot):
+            return
+        
         if message.author.bot and message.author.id == self.bot.user.id:
             return
 
         if "http" in message.content:
-            return
-        
-        if is_command(message, self.bot):
             return
         
         try:
@@ -561,7 +570,7 @@ class Ranking(commands.Cog):
             async for entry in message_entries:
                 ranking = await models.Ranking.objects.aget(id = entry.ranking_id)
                 if ranking.active:
-                    s = parse_message(message.content, ranking.token)
+                    s = await parse_message(message.content, ranking)
                     
                     if s is not None:
                         entry.number = s
