@@ -39,7 +39,7 @@ class TimeStampParsing:
     regex = r"([+-]) ?" + "".join([rf"((?:\d+[{''.join(letters)}])?)" for (letters, _) in values]) + r"((?:\d+)?)"
 
     @classmethod
-    def parse(cls, value: re.Match) -> timedelta:
+    def parse_match(cls, value: re.Match) -> timedelta:
         last_i = -1
         s = timedelta()
         groups = value.groups()
@@ -56,6 +56,17 @@ class TimeStampParsing:
             s += cls.values[last_i + 1  ][1](int(groups[-1]))
         
         return s * sign
+    
+    @classmethod
+    def parse(cls, value: str) -> list[timedelta]:
+        values = []
+        for match in re.finditer(cls.regex, value):
+            try:
+                values.append(cls.parse_match(match))
+            except ValueError:
+                pass
+        
+        return values
 
 if __name__ == "__main__":
     def test_timestamp_parsing():
@@ -111,16 +122,22 @@ if __name__ == "__main__":
             print(f"Testing '{test}' in '{message_string}'")
             if isinstance(value, Exception):
                 try:
-                    result = TimeStampParsing.parse(match)
+                    result = TimeStampParsing.parse_match(match)
                     print(f"Expected exception {value}, but got result {result}")
                 except Exception as e:
                     assert isinstance(e, type(value)) and str(e) == str(value), f"Expected exception {value}, but got {e}"
                     print(f"Correctly raised exception: {e}")
             else:
-                result = TimeStampParsing.parse(match)
+                result = TimeStampParsing.parse_match(match)
                 expected = value if sign == "+" else -value
                 assert result == expected, f"Expected {expected}, but got {result}"
                 print(f"Parsed '{test}' as {result}, expected {expected}")
+        
+        print(f"Parsing string '{message_string}'")
+        for result, sign, value in zip(TimeStampParsing.parse(message_string), SIGNS, [VALUES[i] for i in range(len(VALUES)) if not isinstance(VALUES[i], Exception)]):
+            expected = value if sign == "+" else -value
+            assert result == expected, f"Expected {expected}, but got {result}"
+            print(f"○ {result}, expected {expected}")
 
     
     test_timestamp_parsing()
