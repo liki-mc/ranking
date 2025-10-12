@@ -15,7 +15,7 @@ from website.util import parse_sum, parse_mean
 from bot.bot import Bot
 
 from website import models
-from website.rankingsettings import TimeStampParsing, TimeFrameDisplay
+from website.rankingsettings import TimeStampParsing, TimeFrameDisplay, TIMEFRAME
 
 from django.db import close_old_connections
 import django.db.models as djmodels
@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from website.models import Ranking
     import logging
+    from discord import TextChannel
 
 def format_timestamp(timedelta: timedelta) -> str:
     """
@@ -40,7 +41,7 @@ def format_timestamp(timedelta: timedelta) -> str:
     if days > 0:
         parts.append(f"{days} days ")
     if hours > 0:
-        parts.append(f"{hours}h")
+        parts.append(f"{hours}u")
     if minutes > 0:
         parts.append(f"{minutes}m")
     if seconds > 0 or not parts:
@@ -230,7 +231,7 @@ class Ranking(commands.Cog):
             command.help = self.create.__doc__
 
     @commands.command()
-    async def create(self, ctx: commands.Context, name: str = None, token: str = None):
+    async def create(self, ctx: commands.Context, name: str = None, token: str = None, settings: str = ""):
         """
         Create a ranking in the current channel
 
@@ -242,11 +243,24 @@ class Ranking(commands.Cog):
         if not name:
             await ctx.send("Please provide a name for the ranking")
             return
+        
+        mean = None
+        from_time_ = None
+        if settings:
+            if "mean" in settings:
+                mean_string = re.search(r"mean=(\w+)", settings)
+                if mean_string and mean_string.group(1) in TIMEFRAME.values:
+                    mean = TIMEFRAME(mean_string.group(1))
+            
+            if "from" in settings:
+                from_time_match = re.search(r"from=(now|today|[fFdDtTR\d/: -<>]+)", settings)
+                if from_time_match:
+                    from_time_ = parse_time(from_time_match.group(1).strip())
 
         try:
             ranking : models.Ranking = await models.Ranking.objects.acreate(
                 name = name,
-                token = token,
+                token = token or None,
                 description = "",
                 active = True,
             )
@@ -266,12 +280,31 @@ class Ranking(commands.Cog):
                 
                 else:
                     ranking_settings : models.Settings = await models.Settings.objects.acreate(
-                        ranking = ranking
+                        ranking = ranking,
+                        is_timestamp = True if "timestamp" in settings else False,
+                        reverse_sort = True if "reverse" in settings else False,
+                        mean = mean,
                     )
                     await ranking_settings.asave()
                     if not isinstance(ranking_settings, models.Settings):
                         await ctx.send(f"Failed to create default settings for ranking (#{ranking.id})")
                     else:
+                        if from_time_:
+                            subranking : models.Subranking = await models.Subranking.objects.acreate(
+                                ranking = ranking,
+                                name = "",
+                                active_from = from_time_,
+                                active_until = None
+                            )
+                            await subranking.asave()
+                            if not isinstance(subranking, models.Subranking):
+                                await ctx.send(f"Failed to create default subranking for ranking (#{ranking.id})")
+                            else:
+                                await ctx.send(f"Created ranking {ranking.name} (#{ranking.id}) with {'default +/- tokens' if not ranking.token else f'token {ranking.token}'} starting from <t:{int(from_time_.timestamp())}:f>")
+                                async for message in ctx.channel.history(limit = None, after = from_time_):
+                                    await self.ranking_listener(message)
+                                return
+                            
                         await ctx.send(f"Created ranking {ranking.name} (#{ranking.id}) with {'default +/- tokens' if not ranking.token else f'token {ranking.token}'}")
         
         except Exception as e:
@@ -580,6 +613,8 @@ class Ranking(commands.Cog):
                             message_id = message.id
                         )
                         await entry.asave()
+                        entry.created_at = message.created_at
+                        await entry.asave(update_fields = ["created_at"])
                         if not isinstance(entry, models.Entry):
                             await message.add_reaction("❌")
                             self.bot.logger.error(f"Failed to create entry for {message.author.name} in {ranking.name}")
