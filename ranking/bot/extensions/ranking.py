@@ -279,11 +279,15 @@ class Ranking(commands.Cog):
                     await ctx.send(f"Failed to link ranking (#{ranking.id}) to channel")
                 
                 else:
+                    self.bot.logger.info(f"Reverse_sort: {True if ('reverse' in settings) else False}")
+                    kwargs = {}
+                    if mean:
+                        kwargs["mean"] = mean
                     ranking_settings : models.Settings = await models.Settings.objects.acreate(
                         ranking = ranking,
-                        is_timestamp = True if "timestamp" in settings else False,
-                        reverse_sort = True if "reverse" in settings else False,
-                        mean = mean,
+                        is_timestamp = True if ("timestamp" in settings) else False,
+                        reverse_sort = True if ("reverse" in settings) else False,
+                        **kwargs
                     )
                     await ranking_settings.asave()
                     if not isinstance(ranking_settings, models.Settings):
