@@ -1,6 +1,12 @@
 from django.db import models
+from django.utils import timezone
 
 from datetime import datetime
+from annoying.fields import AutoOneToOneField
+
+from typing import Coroutine
+
+from .rankingsettings import TIMEFRAME
 
 # Create your models here.
 class TimeStamp(models.Model):
@@ -10,35 +16,65 @@ class TimeStamp(models.Model):
     class Meta:
         abstract = True
 
+
+
+class Settings(models.Model):
+    ranking = AutoOneToOneField(
+        "website.Ranking", 
+        on_delete = models.CASCADE, 
+        primary_key = True
+    )
+    reverse_sort = models.BooleanField(default = False)
+    is_timestamp = models.BooleanField(default = False)
+    mean = models.CharField(max_length = 10, choices = TIMEFRAME)
+    median = models.CharField(max_length = 10, choices = TIMEFRAME)
+
 class Ranking(TimeStamp):
     name = models.CharField(max_length = 200, blank = False)
     token = models.CharField(max_length = 20, null = True, blank = True)
     description = models.TextField(blank = True)
     active = models.BooleanField(default = True)
-    reverse_sort = models.BooleanField(default = False)
 
     def __str__(self):
         return self.name
     
     @property
     def from_time(self) -> datetime:
-        active_subrankings = self.subranking_set.filter(
+        return self.subranking_set.filter(
             models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
             active_from__lte = datetime.now()
-        )
-        if active_subrankings:
-            return min(active_subrankings, key = lambda x: x.active_from).active_from
-        return datetime(1970, 1, 1)
+        ).aggregate(models.Min('active_from'))['active_from__min'] or datetime.min
+
+    @property
+    def afrom_time(self) -> Coroutine[datetime, None, None]:
+        async def coro() -> Coroutine[datetime, None, None]:
+            return (await self.subranking_set.filter(
+                models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
+                active_from__lte = datetime.now()
+            ).aaggregate(models.Min('active_from')))['active_from__min'] or datetime.min
+        return coro()
 
     @property
     def subranking_name(self) -> str:
-        active_subrankings = self.subranking_set.filter(
-            models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
-            active_from__lte = datetime.now()
-        )
-        if active_subrankings:
-            return min(active_subrankings, key = lambda x: x.active_from).name
-        return ""
+        try:
+            return self.subranking_set.filter(
+                models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
+                active_from__lte = datetime.now()
+            ).earliest('active_from').name or ""
+        except Subranking.DoesNotExist:
+            return ""
+    
+    @property
+    def asubranking_name(self) -> Coroutine[str, None, None]:
+        async def coro() -> Coroutine[str, None, None]:
+            try:
+                return (await self.subranking_set.filter(
+                    models.Q(active_until__isnull = True) | models.Q(active_until__gt = datetime.now()), 
+                    active_from__lte = datetime.now()
+                ).aearliest('active_from')).name or ""
+            except Subranking.DoesNotExist:
+                return ""
+        return coro()
 
 class RankingChannel(TimeStamp):
     ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
@@ -91,7 +127,7 @@ class Subranking(TimeStamp):
     ranking = models.ForeignKey(Ranking, on_delete = models.CASCADE)
     name = models.CharField(max_length = 200, blank = False)
     description = models.TextField(blank = True)
-    active_from = models.DateTimeField(default = datetime.now())
+    active_from = models.DateTimeField(default = timezone.now)
     active_until = models.DateTimeField(null = True, blank = True)
 
     def __str__(self):
