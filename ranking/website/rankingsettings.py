@@ -1,5 +1,7 @@
-from typing import Callable
-from datetime import timedelta
+from __future__ import annotations
+
+from typing import Callable, TYPE_CHECKING
+from datetime import timedelta, datetime
 import re
 
 class TimeStampParsing:
@@ -145,6 +147,11 @@ if __name__ == "__main__":
 else:
     # django raises stupid errors if this is not in a module and settings aren't loaded or sum
     from django.db import models
+    from asgiref.sync import sync_to_async
+    if TYPE_CHECKING:
+        from website.models import Entry, Ranking, Settings
+        from typing import Coroutine
+        import logging
 
     class TIMEFRAME(models.TextChoices):
         ALL = "all"
@@ -155,4 +162,87 @@ else:
         ENTRY = "entry"
         
         __empty__ = "none"
+    
+    class TimeFrameDisplay:
+        funcs: dict[TIMEFRAME, callable[[datetime], datetime]] = {
+            TIMEFRAME.ALL: lambda x: x,
+            TIMEFRAME.YEAR: models.functions.TruncYear,
+            TIMEFRAME.MONTH: models.functions.TruncMonth,
+            TIMEFRAME.WEEK: models.functions.TruncWeek,
+            TIMEFRAME.DAY: models.functions.TruncDay,
+            TIMEFRAME.ENTRY: lambda x: x,
+        }
+
+        @classmethod
+        async def parse_mean(cls, objects: models.BaseManager[Entry], settings: Settings, ranking: Ranking, users: list[int], logger: logging.Logger) -> Coroutine[dict[int, float]]:
+            logger.info("Parsing timeframe mean")
+            # return_value = objects.filter(
+            #     ranking_id = ranking.id,
+            #     user__in = users,
+            #     created_at__gte = ranking.from_time
+            # ).annotate(
+            #     timeframe_mean = cls.funcs[settings.mean](models.F("created_at"))
+            # ).values(
+            #     "timeframe_mean", "user"
+            # ).annotate(
+            #     timeframe_value = models.Sum("score")
+            # ).values(
+            #     "user"
+            # ).annotate(
+            #     mean = models.Avg("timeframe_value")
+            # ).order_by(
+            #     "-mean"
+            # )
+            from_time: datetime = await ranking.afrom_time
+            a = objects.filter(
+                ranking_id = ranking.id,
+                user__in = users,
+                created_at__gte = from_time
+            )
+            logger.info(f"Filtered entries: {a.query}")
+            b = a.annotate(
+                timeframe_mean = cls.funcs[settings.mean](models.F("created_at"))
+            )
+            logger.info(f"Annotated timeframe_mean: {b.query}")
+            c = b.values(
+                "timeframe_mean", "user"
+            )
+            logger.info(f"Intermediate values: {await sync_to_async(list)(c)}")
+            logger.info(f"Values selected: {c.query}")
+            d = c.annotate(
+                timeframe_value = models.Sum("number")
+            )
+            logger.info(f"Annotated timeframe_values: {await sync_to_async(list)(d)}")
+            logger.info(f"Annotated timeframe_value: {d.query}")
+            # e = d.values(
+            #     "user"
+            # )
+            # logger.info(f"Values selected: {e.query}")
+            # values = await sync_to_async(list)(e)
+            # logger.info(f"Intermediate values: {values}")
+            # return_value = e.annotate(
+            #     mean = models.Avg("timeframe_value")
+            # ).order_by(
+            #     "-mean"
+            # )
+            # logger.info(f"Final query: {return_value.query}")
+            entries = await sync_to_async(list)(d)
+
+            def user_values(user):
+                score = 0
+                last_updated = datetime.min.replace(tzinfo = from_time.tzinfo)
+                for entry in entries:
+                    if entry["user"] == user:
+                        if entry["timeframe_mean"] > last_updated:
+                            last_updated = entry["timeframe_mean"]
+                        
+                        score += entry["timeframe_value"]
+                
+                return {
+                    "score": score,
+                    "last_updated": last_updated,
+                }
+            return {
+                user : user_values(user) for user in users
+            }
     
