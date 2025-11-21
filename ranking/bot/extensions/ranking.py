@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, date, time, timedelta
 import re
 
-from discord import Interaction, Message
+from discord import Message
 from discord.ext import commands
 
 import json
@@ -15,10 +15,9 @@ from website.util import parse_sum, parse_mean
 from bot.bot import Bot
 
 from website import models
-from website.rankingsettings import TimeStampParsing, TimeFrameDisplay, TIMEFRAME
+from website.rankingsettings import TimeStampParsing, TIMEFRAME
 
 from django.db import close_old_connections
-import django.db.models as djmodels
 
 import traceback
 
@@ -27,7 +26,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from website.models import Ranking
     import logging
-    from discord import TextChannel
+    from typing import Literal
 
 def format_timestamp(timedelta: timedelta) -> str:
     """
@@ -581,6 +580,78 @@ class Ranking(commands.Cog):
         except Exception as e:
             await ctx.send(f"Failed to create subranking")
             self.bot.logger.error(f"Failed to create subranking: {e}")
+    
+    @commands.command()
+    async def entry(self, ctx: commands.Context, command_str: str, *args):
+        """
+        Interact with entries, current subcommands:
+        - create:
+            Create an entry with specified time and value.
+            Usage: entry create <time> <value> [user_id] [ranking_id]
+
+            Arguments:
+            - time: a valid time string (e.g. "18/08/2002-12:00:00" or "20/08/2002" or "now" or "today" or a discord timestamp)
+            - value: The message that would otherwise be parsed
+            - user_id: The ID of the user to create the entry for (optional, defaults to the message author)
+            - ranking_id: The ID of the ranking to create the entry for (optional, defaults to all rankings in the channel)
+        """
+        self.bot.logger.info(f"Entry command called with command: '{command_str}', args: {args}")
+        if command_str == "create":
+            await self.create_entry(ctx, args)
+    
+    async def create_entry(self, ctx: commands.Context, args: list[str]):
+        await sta(close_old_connections)()
+        if len(args) < 2:
+            await ctx.send("Please provide a time and value")
+            return
+        
+        time_str = args[0]
+        value_str = args[1]
+        user_id = int(args[2]) if len(args) >= 3 else ctx.author.id
+        ranking_id = int(args[3]) if len(args) >= 4 else None
+
+        entry_time = parse_time(time_str)
+
+        try:
+            ranking_ids = [ranking_id]
+            if ranking_id is None:
+                ranking_ids = []
+                ranking_channels = await sta(models.RankingChannel.objects.filter)(
+                    channel_id = ctx.channel.id
+                )
+                async for ranking_channel in ranking_channels:
+                    ranking_ids.append(ranking_channel.ranking_id)
+
+            matches = False
+            for ranking_id in ranking_ids:
+                ranking : models.Ranking = await models.Ranking.objects.aget(id = ranking_id)
+                if not isinstance(ranking, models.Ranking):
+                    await ctx.send(f"Failed to get ranking (#{ranking_id})")
+                    return
+                
+                s = await parse_message(value_str, ranking, self.bot.logger)
+                
+                if s is not None:
+                    entry : models.Entry = await models.Entry.objects.acreate(
+                        ranking = ranking,
+                        number = s,
+                        user = user_id,
+                        message_id = ctx.message.id  # No associated message
+                    )
+                    entry.created_at = entry_time
+                    await entry.asave()
+                    matches = True
+                    if not isinstance(entry, models.Entry):
+                        await ctx.send(f"Failed to create entry for user {user_id} in ranking {ranking.name} (#{ranking.id})")
+                else:
+                    await ctx.send(f"Failed to parse value for ranking {ranking.name} (#{ranking.id})")
+            
+            if matches:
+                await ctx.message.add_reaction("☑")
+        
+        except Exception as e:
+            await ctx.send(f"Failed to create entry")
+            self.bot.logger.error(f"Failed to create entry: {e}")
 
     @commands.Cog.listener("on_message")
     async def ranking_listener(self, message: Message):
@@ -640,7 +711,9 @@ class Ranking(commands.Cog):
         await sta(close_old_connections)()
         
         if is_command(message, self.bot):
-            return
+            # dirty hack to apply the entry create edits
+            if not message.content[1:].startswith("entry create"):
+                return
         
         if message.author.bot and message.author.id == self.bot.user.id:
             return
